@@ -36,6 +36,30 @@ export type ChangeInput =
   | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[] }
   | { type: 'doc'; doc: Checklist };
 
+export type AIAction =
+  | {
+      type: 'add_event';
+      day: number;
+      title: string;
+      time?: string;
+      note?: string;
+      groupLabel?: string;
+      items?: string[];
+    }
+  | {
+      type: 'add_items';
+      day?: number;
+      eventTitle?: string;
+      groupLabel?: string;
+      items: string[];
+    }
+  | {
+      type: 'set_done';
+      target: string;
+      done: boolean;
+      day?: number;
+    };
+
 export const LIMITS = { items: 200, text: 160 } as const;
 
 export function eventGroups(ev: Event): Group[] {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
+import VoiceModal from '@/components/VoiceModal';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
@@ -109,6 +110,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [exporting, setExporting] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showAddDay, setShowAddDay] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
 
   const nextSuggestedDay = useMemo(() => {
     const days = doc.days.map((d) => d.day);
@@ -208,6 +210,24 @@ export default function Checklist({ initial }: { initial: Doc }) {
       const el = document.getElementById(`day-${day}`);
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }, 100);
+  };
+
+  // ---------- AI 语音配置转换 ----------
+  const handleApplyAI = async (text: string) => {
+    const res = await fetch('/api/ai/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'AI 解析失败');
+    }
+    const data = await res.json();
+    if (data.doc) {
+      commit(data.doc);
+    }
+    return data;
   };
 
   // ---------- 修改 ----------
@@ -420,6 +440,24 @@ export default function Checklist({ initial }: { initial: Doc }) {
           onAdd={handleAddDay}
         />
       )}
+
+      {/* 手机端/页面浮动 AI 语音助手按钮 */}
+      <button
+        type="button"
+        className="ai-voice-fab"
+        onClick={() => setShowVoiceModal(true)}
+        aria-label="打开 AI 语音助手"
+      >
+        <span className="ai-voice-fab-icon" aria-hidden="true">🎙️</span>
+        <span>AI 语音</span>
+      </button>
+
+      <VoiceModal
+        isOpen={showVoiceModal}
+        onClose={() => setShowVoiceModal(false)}
+        onApplyAI={handleApplyAI}
+        showToast={showToast}
+      />
 
       {preview && (
         <div className="preview" role="dialog" aria-modal="true" aria-label="长图预览">
