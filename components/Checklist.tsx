@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Event, type Group, type Item, type Section, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
 import VoiceModal from '@/components/VoiceModal';
-import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon, PlusIcon, TrashIcon } from '@/components/Icons';
+import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon, PlusIcon, SparklesIcon, TrashIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
@@ -728,17 +728,17 @@ export default function Checklist({ initial }: { initial: Doc }) {
         />
       )}
 
-      {/* 手机端/页面浮动 AI 语音助手按钮 */}
+      {/* 手机端/页面浮动 AI 助手按钮 */}
       <button
         type="button"
         className="ai-voice-fab"
         onClick={() => setShowVoiceModal(true)}
-        aria-label="打开 AI 语音助手"
+        aria-label="打开 AI 语音口述助手"
       >
         <span className="ai-voice-fab-icon" aria-hidden="true">
-          <MicIcon size={18} />
+          <SparklesIcon size={18} />
         </span>
-        <span>AI 语音</span>
+        <span>AI 语音口述</span>
       </button>
 
       <VoiceModal
