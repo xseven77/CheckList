@@ -1,4 +1,4 @@
-import { addDay } from '@/lib/store';
+import { NotFoundError, addDay, deleteDay } from '@/lib/store';
 import { readJson } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
@@ -17,3 +17,23 @@ export async function POST(req: Request) {
   const change = await addDay(dayNum, { title, time });
   return Response.json(change);
 }
+
+export async function DELETE(req: Request) {
+  const body = await readJson(req);
+  const dayNum = Number(body?.day);
+
+  if (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > 31) {
+    return Response.json({ error: '缺少有效的 day 参数' }, { status: 400 });
+  }
+
+  try {
+    const change = await deleteDay(dayNum);
+    return Response.json(change);
+  } catch (e) {
+    if (e instanceof NotFoundError) {
+      return Response.json({ error: '未找到指定日期' }, { status: 404 });
+    }
+    throw e;
+  }
+}
+

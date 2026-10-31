@@ -1,4 +1,4 @@
-import { NotFoundError, setTaskDone, updateEvent } from '@/lib/store';
+import { NotFoundError, deleteEvent, setTaskDone, updateEvent } from '@/lib/store';
 import { readJson } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
@@ -27,3 +27,15 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     throw e;
   }
 }
+
+/** 删除事项 */
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  try {
+    return Response.json(await deleteEvent(id));
+  } catch (e) {
+    if (e instanceof NotFoundError) return Response.json({ error: '没有这个事项' }, { status: 404 });
+    throw e;
+  }
+}
+

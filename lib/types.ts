@@ -84,6 +84,31 @@ export function findEventByGroup(doc: Checklist, gid: string): Event | undefined
   }
 }
 
+export function findSection(doc: Checklist, id: string): { section: Section; event: Event; day: Day } | undefined {
+  for (const d of doc.days) {
+    for (const ev of d.events) {
+      for (const s of ev.sections) {
+        if (s.id === id) return { section: s, event: ev, day: d };
+      }
+    }
+  }
+}
+
+export function findGroupContainer(
+  doc: Checklist,
+  gid: string
+): { event: Event; section?: Section; day: Day } | undefined {
+  for (const d of doc.days) {
+    for (const ev of d.events) {
+      if (ev.groups.some((g) => g.id === gid)) return { event: ev, day: d };
+      for (const s of ev.sections) {
+        if (s.groups.some((g) => g.id === gid)) return { event: ev, section: s, day: d };
+      }
+    }
+  }
+}
+
+
 /** 校验并整理客户端提交的明细列表，不合法时返回 null */
 export function cleanItems(raw: unknown): Item[] | null {
   if (!Array.isArray(raw) || raw.length > LIMITS.items) return null;

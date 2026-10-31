@@ -1,7 +1,22 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { type AIAction, type Change, type ChangeInput, type Checklist, type Event, type Item, eventGroups, findEvent, findEventByGroup, findGroup } from './types';
+import {
+  type AIAction,
+  type Change,
+  type ChangeInput,
+  type Checklist,
+  type Event,
+  type Group,
+  type Item,
+  type Section,
+  eventGroups,
+  findEvent,
+  findEventByGroup,
+  findGroup,
+  findGroupContainer,
+  findSection,
+} from './types';
 
 // 数据目录：state.json 是实时数据；第一次启动时从 seed.json 复制一份
 const DATA_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.DATA_DIR || path.join(process.cwd(), 'data'));
@@ -123,6 +138,166 @@ export function updateEvent(id: string, updates: { time?: string; title?: string
     return commit(doc, { type: 'doc', doc });
   });
 }
+
+function refreshEventDone(ev: Event) {
+  const allItems = eventGroups(ev).flatMap((g) => g.items);
+  if (allItems.length > 0) {
+    ev.done = allItems.every((i) => i.done);
+  }
+}
+
+export function addEvent(
+  day: number,
+  data: { title: string; time?: string; note?: string }
+): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    let targetDay = doc.days.find((d) => d.day === day);
+    if (!targetDay) {
+      targetDay = { day, events: [] };
+      doc.days.push(targetDay);
+      doc.days.sort((a, b) => a.day - b.day);
+    }
+    const newEvent: Event = {
+      id: 'e' + day + '_' + Math.random().toString(36).slice(2, 7),
+      time: data.time?.trim() || '全天',
+      title: data.title.trim() || '新增事项',
+      note: data.note?.trim() || '',
+      done: false,
+      groups: [
+        {
+          id: 'g' + day + '_' + Math.random().toString(36).slice(2, 7),
+          label: '',
+          items: [],
+        },
+      ],
+      sections: [],
+    };
+    targetDay.events.push(newEvent);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function deleteEvent(id: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    let deleted = false;
+    for (const d of doc.days) {
+      const idx = d.events.findIndex((e) => e.id === id);
+      if (idx !== -1) {
+        d.events.splice(idx, 1);
+        deleted = true;
+        break;
+      }
+    }
+    if (!deleted) throw new NotFoundError(id);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function addSection(eventId: string, title: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const ev = findEvent(doc, eventId);
+    if (!ev) throw new NotFoundError(eventId);
+    const newSec: Section = {
+      id: 's_' + Math.random().toString(36).slice(2, 8),
+      title: title.trim() || '分类明细',
+      groups: [
+        {
+          id: 'g_' + Math.random().toString(36).slice(2, 8),
+          label: '准备事项',
+          items: [],
+        },
+      ],
+    };
+    ev.sections.push(newSec);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function updateSection(id: string, title: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const found = findSection(doc, id);
+    if (!found) throw new NotFoundError(id);
+    found.section.title = title.trim() || '分类明细';
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function deleteSection(id: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const found = findSection(doc, id);
+    if (!found) throw new NotFoundError(id);
+    found.event.sections = found.event.sections.filter((s) => s.id !== id);
+    refreshEventDone(found.event);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function addGroup(
+  parent: { eventId?: string; sectionId?: string },
+  label: string
+): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const newGroup: Group = {
+      id: 'g_' + Math.random().toString(36).slice(2, 8),
+      label: label.trim(),
+      items: [],
+    };
+    if (parent.sectionId) {
+      const found = findSection(doc, parent.sectionId);
+      if (!found) throw new NotFoundError(parent.sectionId);
+      found.section.groups.push(newGroup);
+    } else if (parent.eventId) {
+      const ev = findEvent(doc, parent.eventId);
+      if (!ev) throw new NotFoundError(parent.eventId);
+      ev.groups.push(newGroup);
+    } else {
+      throw new Error('缺少 parent 参数');
+    }
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function updateGroupLabel(id: string, label: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const group = findGroup(doc, id);
+    if (!group) throw new NotFoundError(id);
+    group.label = label.trim();
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function deleteGroup(id: string): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const container = findGroupContainer(doc, id);
+    if (!container) throw new NotFoundError(id);
+    if (container.section) {
+      container.section.groups = container.section.groups.filter((g) => g.id !== id);
+    } else {
+      container.event.groups = container.event.groups.filter((g) => g.id !== id);
+    }
+    refreshEventDone(container.event);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
+export function deleteDay(day: number): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const idx = doc.days.findIndex((d) => d.day === day);
+    if (idx === -1) throw new NotFoundError(String(day));
+    doc.days.splice(idx, 1);
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
 
 export function addDay(day: number, initialEvent?: { title?: string; time?: string }): Promise<Change> {
   return serial(async () => {
