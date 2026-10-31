@@ -1,0 +1,14 @@
+services:
+  checklist:
+    build: .
+    container_name: wedding-checklist
+    ports:
+      - "3000:3000"
+    volumes:
+      # 持久化数据目录，容器重建后状态不会丢
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      # 可选：设置访问密码，不设置则完全开放
+      # - APP_PASSWORD=your_secure_password
+    restart: unless-stopped

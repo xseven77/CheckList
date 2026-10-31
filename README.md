@@ -1,24 +1,108 @@
 # CheckList · 婚礼筹备清单
 
-3—7 号婚礼行程与物品清单，单页网页，已发布为 Claude Artifact：
-https://claude.ai/artifact/XZm1PAexPNk1tBfRXmrLUH
+婚礼行程与物资筹备清单全栈应用（3—7 号）。支持多人多端实时同步勾选、明细增删改、长图导出，基于本地 JSON 文件持久化存储，开箱即用，支持独立自部署。
 
-## 功能
-- 默认查看状态：勾选事项和明细，顶部显示总进度、每天进度、每个分区进度
-- 点「编辑」进入编辑状态：增加、修改、删除明细；删除要二次确认，删除后 8 秒内可撤销
-- 导出长图：把全部清单画成 PNG（✓ 表示已完成），可保存或长按保存
-- 手机友好：触控区域 ≥ 44px，窄屏日期改为横排
+> 原单页 HTML Artifact 版本已归档在 [`legacy/artifact.html`](legacy/artifact.html)。
 
-## 数据
-- 在 Claude 里登录打开时，勾选和修改存在 Artifact 的共享数据库里，所有能打开这个页面的人看到同一份
-  - `groups/<分组id>`：`{ items: [{ id, t, d }], at }`
-  - `tasks/<事项id>`：`{ done, at }`
-  - 数据库里没有的分组用页面内置的默认清单
-- 打不开共享数据库时（没登录等）只存在当前浏览器的 localStorage
+---
 
-## 文件
-- `index.html`：页面本体（发布时平台会补上 `<!doctype html>` 等外层结构）
-- `codex-original/`：之前 Codex 会话里做的版本，留作参考
+## 核心功能
 
-## 更新
-改完 `index.html` 后让 Claude 重新发布同一个文件，链接不变。
+- **查看与勾选**：事项与明细随时勾选，实时计算总进度、每日进度与各分区进度；
+- **编辑明细**：点击「编辑」可对各分组明细进行新增、修改与删除（删除带二次确认与 8 秒撤销）；
+- **实时同步**：基于 Server-Sent Events (SSE)，多台手机/电脑打开同一页面，任何一端勾选或编辑实时推送到所有设备；
+- **长图导出**：一键生成高清 PNG 长图（✓ 标注已完成项），支持手机长按保存与电脑下载分享；
+- **移动端优化**：触控区域 ≥ 44px，窄屏适配自适应布局；
+- **可选访问保护**：配置环境变量 `APP_PASSWORD` 即可开启 HTTP Basic 认证，未配置则完全开放。
+
+---
+
+## 本地开发与运行
+
+### 快速启动（构建并启动生产服务）
+```bash
+./start.sh
+# 或
+npm run serve
+```
+
+### 分步运行
+1. **安装依赖**：
+   ```bash
+   npm install
+   ```
+2. **开发模式（热更新）**：
+   ```bash
+   npm run dev
+   ```
+   打开浏览器访问 [http://localhost:3000](http://localhost:3000)。同一局域网下的手机可通过 `http://<电脑局域网IP>:3000` 访问。
+3. **独立构建与启动**：
+   ```bash
+   npm run build
+   npm start
+   ```
+
+---
+
+## 部署方式
+
+### 方式一：Docker / Docker Compose（推荐）
+
+项目根目录已提供 `Dockerfile` 与 `docker-compose.yml`：
+
+```bash
+# 启动容器
+docker compose up -d --build
+```
+数据会自动持久化挂载到宿主机的 `./data` 目录。
+
+如需开启访问密码，在 `docker-compose.yml` 中或启动时传入环境变量：
+```yaml
+environment:
+  - APP_PASSWORD=your_password
+```
+
+### 方式二：Node.js 原生部署
+
+```bash
+npm ci
+npm run build
+PORT=3000 npm start
+```
+
+---
+
+## 数据持久化机制
+
+* **种子数据**：[`data/seed.json`](data/seed.json) 包含默认的 3—7 号全部行程、事项及分组明细，受 Git 版本控制；
+* **运行时状态**：应用首次启动读取数据时，若无运行时状态文件，会自动从 `seed.json` 复制生成 `data/state.json`；
+* **原子写入与并发控制**：所有的勾选与编辑操作均在服务端排队串行写入，采用临时文件 + 重命名实现原子写入，避免断电或并发写损坏数据；
+* **数据备份**：访问 `GET /api/checklist` 即可获取当前整份 JSON 数据，支持脚本定期备份。
+
+---
+
+## 项目结构
+
+```text
+├── app/
+│   ├── api/
+│   │   ├── checklist/    # 获取整份清单 JSON
+│   │   ├── groups/[id]/  # 替换分组明细接口 (PUT)
+│   │   ├── tasks/[id]/   # 更新事项勾选状态 (PUT)
+│   │   └── stream/       # SSE 实时推送通道 (GET)
+│   ├── globals.css       # 全局样式与浅/深色主题
+│   ├── layout.tsx        # 根布局
+│   └── page.tsx          # 页面入口 (SSR)
+├── components/
+│   └── Checklist.tsx     # 清单核心交互组件
+├── data/
+│   ├── seed.json         # 初始种子数据
+│   └── state.json        # 运行时动态数据 (gitignore)
+├── lib/
+│   ├── exportImage.ts    # Canvas 高清长图绘制
+│   ├── store.ts          # JSON 数据持久化与事件总线
+│   └── types.ts          # 数据模型与类型定义
+├── proxy.ts              # 可选密码访问控制代理 (Next.js 16)
+├── Dockerfile            # 多阶段轻量镜像构建
+└── docker-compose.yml    # 容器化一键部署编排
+```

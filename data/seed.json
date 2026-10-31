@@ -1,0 +1,924 @@
+{
+  "version": 1,
+  "rev": 0,
+  "updatedAt": null,
+  "title": "婚礼筹备清单",
+  "subtitle": "3—7 号 · 行程、搬运物资与随身用品",
+  "days": [
+    {
+      "day": 3,
+      "events": [
+        {
+          "id": "e3a",
+          "time": "上午",
+          "title": "宾客名单与婚礼素材",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g3a",
+              "label": "",
+              "items": [
+                {
+                  "id": "g3a-0",
+                  "text": "确认宾客名单",
+                  "done": false
+                },
+                {
+                  "id": "g3a-1",
+                  "text": "婚纱照（注明哪一张用于迎宾）",
+                  "done": false
+                },
+                {
+                  "id": "g3a-2",
+                  "text": "开场视频",
+                  "done": false
+                },
+                {
+                  "id": "g3a-3",
+                  "text": "打包到百度云发出去",
+                  "done": false
+                }
+              ]
+            }
+          ],
+          "sections": []
+        },
+        {
+          "id": "e3b",
+          "time": "17:30 出发",
+          "title": "货拉拉运物资 → 摩格俪",
+          "note": "",
+          "done": false,
+          "groups": [],
+          "sections": [
+            {
+              "id": "s3b",
+              "title": "伴手礼、桌糖与现场物资",
+              "groups": [
+                {
+                  "id": "g3b",
+                  "label": "糖与礼物",
+                  "items": [
+                    {
+                      "id": "g3b-0",
+                      "text": "伴手礼 75 份",
+                      "done": false
+                    },
+                    {
+                      "id": "g3b-1",
+                      "text": "桌糖 173 盒",
+                      "done": false
+                    },
+                    {
+                      "id": "g3b-2",
+                      "text": "玩具 60 个",
+                      "done": false
+                    },
+                    {
+                      "id": "g3b-3",
+                      "text": "抽奖礼物 10 个",
+                      "done": false
+                    },
+                    {
+                      "id": "g3b-4",
+                      "text": "彩票 20 张",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g3c",
+                  "label": "喜字贴",
+                  "items": [
+                    {
+                      "id": "g3c-0",
+                      "text": "喜字贴 15 个（贴桌糖盒下面，每桌一个）",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g3d",
+                  "label": "酒与烟",
+                  "items": [
+                    {
+                      "id": "g3d-0",
+                      "text": "剑南春 16 瓶",
+                      "done": false
+                    },
+                    {
+                      "id": "g3d-1",
+                      "text": "烟 3 条",
+                      "done": false
+                    },
+                    {
+                      "id": "g3d-2",
+                      "text": "散烟（每桌 2 包）",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g3e",
+                  "label": "迎宾布置",
+                  "items": [
+                    {
+                      "id": "g3e-0",
+                      "text": "奶油奶盖迎宾 KT 板",
+                      "done": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "e3c",
+          "time": "19:00",
+          "title": "彩排",
+          "note": "嘟嘟在场",
+          "done": false,
+          "groups": [
+            {
+              "id": "g3f",
+              "label": "",
+              "items": []
+            }
+          ],
+          "sections": []
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "events": [
+        {
+          "id": "e4a",
+          "time": "当天",
+          "title": "家里打扫卫生",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g4a",
+              "label": "",
+              "items": [
+                {
+                  "id": "g4a-0",
+                  "text": "换红色四件套",
+                  "done": false
+                }
+              ]
+            }
+          ],
+          "sections": []
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "events": [
+        {
+          "id": "e5a",
+          "time": "10:00 前",
+          "title": "和妈妈做美甲",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g5a",
+              "label": "",
+              "items": []
+            }
+          ],
+          "sections": []
+        },
+        {
+          "id": "e5b",
+          "time": "11:00",
+          "title": "宁波 → 杭州，接舅妈",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g5b",
+              "label": "",
+              "items": []
+            }
+          ],
+          "sections": []
+        },
+        {
+          "id": "e5c",
+          "time": "晚上",
+          "title": "餐厅吃饭",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g5c",
+              "label": "",
+              "items": []
+            }
+          ],
+          "sections": []
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "events": [
+        {
+          "id": "e6a",
+          "time": "上午",
+          "title": "取婚纱与礼服",
+          "note": "",
+          "done": false,
+          "groups": [],
+          "sections": [
+            {
+              "id": "s6a",
+              "title": "取衣清单",
+              "groups": [
+                {
+                  "id": "g6a",
+                  "label": "女生",
+                  "items": [
+                    {
+                      "id": "g6a-0",
+                      "text": "主纱",
+                      "done": false
+                    },
+                    {
+                      "id": "g6a-1",
+                      "text": "主头纱",
+                      "done": false
+                    },
+                    {
+                      "id": "g6a-2",
+                      "text": "晨袍",
+                      "done": false
+                    },
+                    {
+                      "id": "g6a-3",
+                      "text": "敬酒服",
+                      "done": false
+                    },
+                    {
+                      "id": "g6a-4",
+                      "text": "女生西装全套",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6b",
+                  "label": "男生",
+                  "items": [
+                    {
+                      "id": "g6b-0",
+                      "text": "黑色中式礼服",
+                      "done": false
+                    },
+                    {
+                      "id": "g6b-1",
+                      "text": "男生婚纱",
+                      "done": false
+                    },
+                    {
+                      "id": "g6b-2",
+                      "text": "男生头纱",
+                      "done": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "e6b",
+          "time": "13:00 到达",
+          "title": "摩格俪 · 送服装",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g6c",
+              "label": "带去",
+              "items": [
+                {
+                  "id": "g6c-0",
+                  "text": "主纱",
+                  "done": false
+                },
+                {
+                  "id": "g6c-1",
+                  "text": "主头纱",
+                  "done": false
+                },
+                {
+                  "id": "g6c-2",
+                  "text": "敬酒服",
+                  "done": false
+                },
+                {
+                  "id": "g6c-3",
+                  "text": "红色高跟鞋",
+                  "done": false
+                }
+              ]
+            }
+          ],
+          "sections": []
+        },
+        {
+          "id": "e6c",
+          "time": "下午",
+          "title": "南苑环球酒店 · 带用品与布置道具",
+          "note": "",
+          "done": false,
+          "groups": [],
+          "sections": [
+            {
+              "id": "s6b",
+              "title": "新娘用品",
+              "groups": [
+                {
+                  "id": "g6d",
+                  "label": "身体护理",
+                  "items": [
+                    {
+                      "id": "g6d-0",
+                      "text": "脱毛刀",
+                      "done": false
+                    },
+                    {
+                      "id": "g6d-1",
+                      "text": "磨砂膏",
+                      "done": false
+                    },
+                    {
+                      "id": "g6d-2",
+                      "text": "身体乳",
+                      "done": false
+                    },
+                    {
+                      "id": "g6d-3",
+                      "text": "止汗露",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6e",
+                  "label": "护肤卸妆",
+                  "items": [
+                    {
+                      "id": "g6e-0",
+                      "text": "面膜 ×5",
+                      "done": false
+                    },
+                    {
+                      "id": "g6e-1",
+                      "text": "唇膏",
+                      "done": false
+                    },
+                    {
+                      "id": "g6e-2",
+                      "text": "卸妆油",
+                      "done": false
+                    },
+                    {
+                      "id": "g6e-3",
+                      "text": "护肤品",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6f",
+                  "label": "妆容眼部",
+                  "items": [
+                    {
+                      "id": "g6f-0",
+                      "text": "美瞳",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-1",
+                      "text": "润眼液",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-2",
+                      "text": "粉底液",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-3",
+                      "text": "眉笔",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-4",
+                      "text": "散粉",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-5",
+                      "text": "YSL 镜面唇釉",
+                      "done": false
+                    },
+                    {
+                      "id": "g6f-6",
+                      "text": "阿玛尼正红唇釉",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6g",
+                  "label": "首饰",
+                  "items": [
+                    {
+                      "id": "g6g-0",
+                      "text": "珍珠耳钉",
+                      "done": false
+                    },
+                    {
+                      "id": "g6g-1",
+                      "text": "假项链",
+                      "done": false
+                    },
+                    {
+                      "id": "g6g-2",
+                      "text": "假手镯",
+                      "done": false
+                    },
+                    {
+                      "id": "g6g-3",
+                      "text": "金项链",
+                      "done": false
+                    },
+                    {
+                      "id": "g6g-4",
+                      "text": "金手镯",
+                      "done": false
+                    },
+                    {
+                      "id": "g6g-5",
+                      "text": "牡丹耳钉",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6h",
+                  "label": "贴身衣物",
+                  "items": [
+                    {
+                      "id": "g6h-0",
+                      "text": "胸贴",
+                      "done": false
+                    },
+                    {
+                      "id": "g6h-1",
+                      "text": "收腹提臀裤",
+                      "done": false
+                    },
+                    {
+                      "id": "g6h-2",
+                      "text": "内衣",
+                      "done": false
+                    },
+                    {
+                      "id": "g6h-3",
+                      "text": "内裤",
+                      "done": false
+                    },
+                    {
+                      "id": "g6h-4",
+                      "text": "睡衣睡裤",
+                      "done": false
+                    },
+                    {
+                      "id": "g6h-5",
+                      "text": "背背佳",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6i",
+                  "label": "鞋服配件",
+                  "items": [
+                    {
+                      "id": "g6i-0",
+                      "text": "金色高跟鞋",
+                      "done": false
+                    },
+                    {
+                      "id": "g6i-1",
+                      "text": "蕾丝高跟鞋",
+                      "done": false
+                    },
+                    {
+                      "id": "g6i-2",
+                      "text": "团扇",
+                      "done": false
+                    },
+                    {
+                      "id": "g6i-3",
+                      "text": "透明伞",
+                      "done": false
+                    },
+                    {
+                      "id": "g6i-4",
+                      "text": "红色阿迪鞋（外景穿）",
+                      "done": false
+                    },
+                    {
+                      "id": "g6i-5",
+                      "text": "便服、拖鞋（中午吃饭穿）",
+                      "done": false
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "s6c",
+              "title": "新郎用品",
+              "groups": [
+                {
+                  "id": "g6j",
+                  "label": "个人准备",
+                  "items": [
+                    {
+                      "id": "g6j-0",
+                      "text": "腋下管理",
+                      "done": false
+                    },
+                    {
+                      "id": "g6j-1",
+                      "text": "眼镜框",
+                      "done": false
+                    },
+                    {
+                      "id": "g6j-2",
+                      "text": "隐形眼镜",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6k",
+                  "label": "服装鞋履",
+                  "items": [
+                    {
+                      "id": "g6k-0",
+                      "text": "睡衣睡裤",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-1",
+                      "text": "西装",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-2",
+                      "text": "领带",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-3",
+                      "text": "西装袜",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-4",
+                      "text": "8cm 皮鞋",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-5",
+                      "text": "便服",
+                      "done": false
+                    },
+                    {
+                      "id": "g6k-6",
+                      "text": "洞洞鞋",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6l",
+                  "label": "红包喜糖",
+                  "items": [
+                    {
+                      "id": "g6l-0",
+                      "text": "大吉大利红包",
+                      "done": false
+                    },
+                    {
+                      "id": "g6l-1",
+                      "text": "喜糖 30 份",
+                      "done": false
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "s6d",
+              "title": "酒店布置道具",
+              "groups": [
+                {
+                  "id": "g6m",
+                  "label": "搬运支撑",
+                  "items": [
+                    {
+                      "id": "g6m-0",
+                      "text": "露营车",
+                      "done": false
+                    },
+                    {
+                      "id": "g6m-1",
+                      "text": "橙子篮筐",
+                      "done": false
+                    },
+                    {
+                      "id": "g6m-2",
+                      "text": "橙子",
+                      "done": false
+                    },
+                    {
+                      "id": "g6m-3",
+                      "text": "支架",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6n",
+                  "label": "工具胶材",
+                  "items": [
+                    {
+                      "id": "g6n-0",
+                      "text": "剪刀",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-1",
+                      "text": "电工剪",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-2",
+                      "text": "小刀",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-3",
+                      "text": "透明胶",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-4",
+                      "text": "红色、黑色扎带",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-5",
+                      "text": "美纹纸",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-6",
+                      "text": "热熔胶",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-7",
+                      "text": "拖线板",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-8",
+                      "text": "双面胶",
+                      "done": false
+                    },
+                    {
+                      "id": "g6n-9",
+                      "text": "点点胶",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6o",
+                  "label": "布艺花艺",
+                  "items": [
+                    {
+                      "id": "g6o-0",
+                      "text": "红丝绒布",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-1",
+                      "text": "假花",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-2",
+                      "text": "插花泡沫",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-3",
+                      "text": "插花渔网",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-4",
+                      "text": "如意抱枕",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-5",
+                      "text": "喜字抱枕",
+                      "done": false
+                    },
+                    {
+                      "id": "g6o-6",
+                      "text": "红色十件套",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6p",
+                  "label": "装饰陈设",
+                  "items": [
+                    {
+                      "id": "g6p-0",
+                      "text": "歪头大喜字",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-1",
+                      "text": "红色 PDD 大杂烩装饰品",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-2",
+                      "text": "托盘",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-3",
+                      "text": "星星人礼盒",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-4",
+                      "text": "金色 KT 板喜字",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-5",
+                      "text": "大小灯笼",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-6",
+                      "text": "YES I DO KT 板",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-7",
+                      "text": "喜结良缘卷轴",
+                      "done": false
+                    },
+                    {
+                      "id": "g6p-8",
+                      "text": "黄色油纸伞 6 把",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6q",
+                  "label": "仪式茶点",
+                  "items": [
+                    {
+                      "id": "g6q-0",
+                      "text": "礼炮",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-1",
+                      "text": "礼花",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-2",
+                      "text": "四宫格托盘（红枣、开心果、桂圆、花生）",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-3",
+                      "text": "敬茶托盘",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-4",
+                      "text": "红色一次性纸杯",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-5",
+                      "text": "茶叶",
+                      "done": false
+                    },
+                    {
+                      "id": "g6q-6",
+                      "text": "小瓶矿泉水 1 箱（贴喜字）",
+                      "done": false
+                    }
+                  ]
+                },
+                {
+                  "id": "g6r",
+                  "label": "拍摄",
+                  "items": [
+                    {
+                      "id": "g6r-0",
+                      "text": "富士 XT5",
+                      "done": false
+                    },
+                    {
+                      "id": "g6r-1",
+                      "text": "拍立得 + 相纸",
+                      "done": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "e6d",
+          "time": "晚上",
+          "title": "宁宁接送奶盖去洗澡",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g6s",
+              "label": "",
+              "items": []
+            }
+          ],
+          "sections": []
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "events": [
+        {
+          "id": "e7a",
+          "time": "上午",
+          "title": "把奶盖的用品带到酒店",
+          "note": "",
+          "done": false,
+          "groups": [
+            {
+              "id": "g7a",
+              "label": "",
+              "items": [
+                {
+                  "id": "g7a-0",
+                  "text": "奶盖的礼服",
+                  "done": false
+                },
+                {
+                  "id": "g7a-1",
+                  "text": "红色胸背",
+                  "done": false
+                }
+              ]
+            }
+          ],
+          "sections": []
+        }
+      ]
+    }
+  ]
+}

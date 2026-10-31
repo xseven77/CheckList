@@ -1,0 +1,24 @@
+{
+  "name": "checklist",
+  "version": "1.0.0",
+  "private": true,
+  "description": "婚礼筹备清单：可勾选、编辑明细、导出长图，数据存成 JSON 文件",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "serve": "next build && next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.4.2",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,1 +1,19 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Runtime data (seed.json is tracked, state.json is created at runtime)
+data/state.json
+data/state.json.*
+data/*.tmp
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Environment variables
+.env*.local
+*.tsbuildinfo
