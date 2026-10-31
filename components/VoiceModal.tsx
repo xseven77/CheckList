@@ -50,10 +50,15 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
 
   const startListening = () => {
     setErr('');
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
 
     if (!SpeechRecognition) {
-      setErr('当前浏览器未开放 Web Speech API 接口，建议直接在下方输入框打字，或使用手机输入法的自带语音输入。');
+      setErr(
+        '手机浏览器在非 HTTPS 局域网下按安全规范未开放麦克风权限。💡 建议直接点击下方输入框，使用手机输入法键盘自带的语音输入键（如微信键盘/苹果听写），100% 顺畅识别！'
+      );
       return;
     }
 
@@ -87,7 +92,13 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
 
       rec.onerror = (e: any) => {
         setIsRecording(false);
-        if (e.error !== 'no-speech') {
+        if (e.error === 'network') {
+          setErr(
+            '浏览器语音识别连接超时（Chrome 自带语音引擎依赖 Google 服务）。💡 推荐直接点击下方输入框，用手机输入法键盘自带的语音键口述，非常快且准！'
+          );
+        } else if (e.error === 'not-allowed') {
+          setErr('麦克风权限未开启或被系统拦截。请在浏览器设置中允许麦克风权限，或直接使用输入法键盘语音输入。');
+        } else if (e.error !== 'no-speech') {
           setErr(`麦克风识别提示（${e.error}），您也可以直接在下方输入修改。`);
         }
       };
@@ -104,19 +115,30 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
     }
   };
 
-  // 处理按住讲话 (Touch & Mouse)
-  const handleHoldStart = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    isHeldRef.current = true;
-    startListening();
+  // 点击切换或按住录音双支持
+  const toggleListening = () => {
+    if (isRecording) {
+      stopListening();
+    } else {
+      startListening();
+    }
   };
 
-  const handleHoldEnd = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (isHeldRef.current) {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // 记录按下时间
+    isHeldRef.current = true;
+    if (!isRecording) {
+      startListening();
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    // 如果长按松开则结束
+    if (isHeldRef.current && isRecording) {
       stopListening();
     }
   };
+
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -160,22 +182,20 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
           手机端按住下方按钮讲话，松开后核对识别信息，确认后由 AI 自动转换为清单数据结构。
         </p>
 
-        {/* 长按讲话区 */}
+        {/* 录音讲话区 */}
         <div className={'voice-record-zone' + (isRecording ? ' recording' : '')}>
           <button
             type="button"
             className={'voice-hold-btn' + (isRecording ? ' active' : '')}
-            onTouchStart={handleHoldStart}
-            onTouchEnd={handleHoldEnd}
-            onTouchCancel={handleHoldEnd}
-            onMouseDown={handleHoldStart}
-            onMouseUp={handleHoldEnd}
-            aria-label={isRecording ? '正在录音，松开结束' : '长按讲话'}
+            onClick={toggleListening}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            aria-label={isRecording ? '正在录音，点击或松开结束' : '点击或按住开始讲话'}
           >
             <MicIcon size={32} />
           </button>
           <div className={'voice-hint' + (isRecording ? ' active' : '')}>
-            {isRecording ? '松开结束识别…' : '按住讲话 · 松开完成'}
+            {isRecording ? '正在聆听…点击或松开结束' : '点击开始讲话 · 也可按住不放'}
           </div>
           {isRecording && (
             <div className="voice-waves" aria-hidden="true">
@@ -187,6 +207,23 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
             </div>
           )}
         </div>
+
+        {/* 局域网/手机端温馨提示 */}
+        <div
+          style={{
+            fontSize: '12.5px',
+            color: 'var(--muted)',
+            background: 'color-mix(in srgb, var(--gold) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--gold) 25%, transparent)',
+            borderRadius: '10px',
+            padding: '8px 12px',
+            marginBottom: '12px',
+            lineHeight: '1.5',
+          }}
+        >
+          💡 <b>手机端建议：</b>局域网非 HTTPS 环境下手机浏览器限制网页麦克风，最推荐直接点击下方输入框，使用<b>手机键盘自带的语音键（如微信键盘/苹果听写）</b>直接口述，识别率极高！
+        </div>
+
 
         {/* 确认识别文本与手动编辑 */}
         <div className="voice-textarea-wrap">

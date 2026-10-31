@@ -13,7 +13,8 @@
   "dependencies": {
     "next": "16.4.2",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "undici": "^8.12.3"
   },
   "devDependencies": {
     "@types/node": "22.18.0",

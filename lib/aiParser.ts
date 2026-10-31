@@ -1,5 +1,17 @@
 import { type AIAction, type Checklist } from './types';
 
+// 环境中若配置了 HTTP/HTTPS 代理，自动注入 Undici 代理分发器
+if (
+  typeof process !== 'undefined' &&
+  (process.env.http_proxy || process.env.https_proxy || process.env.HTTP_PROXY || process.env.HTTPS_PROXY)
+) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { setGlobalDispatcher, EnvHttpProxyAgent } = require('undici');
+    setGlobalDispatcher(new EnvHttpProxyAgent());
+  } catch {}
+}
+
 function parseChineseNumber(str: string): number | null {
   const match = str.match(/\d+/);
   if (match) return parseInt(match[0], 10);
@@ -186,7 +198,7 @@ export async function parseVoicePrompt(prompt: string, currentDoc: Checklist): P
   ]
 }`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
