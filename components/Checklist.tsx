@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
 import VoiceModal from '@/components/VoiceModal';
+import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
@@ -112,10 +113,17 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [showAddDay, setShowAddDay] = useState(false);
   const [showVoiceModal, setShowVoiceModal] = useState(false);
 
-  const nextSuggestedDay = useMemo(() => {
+  const earliestDay = useMemo(() => {
     const days = doc.days.map((d) => d.day);
-    return days.length ? Math.max(...days) + 1 : 1;
+    return days.length ? Math.min(...days) : 3;
   }, [doc.days]);
+
+  const latestDay = useMemo(() => {
+    const days = doc.days.map((d) => d.day);
+    return days.length ? Math.max(...days) : 7;
+  }, [doc.days]);
+
+  const [addDayDefault, setAddDayDefault] = useState<number>(8);
 
   // ---------- 实时同步 ----------
   useEffect(() => {
@@ -230,6 +238,36 @@ export default function Checklist({ initial }: { initial: Doc }) {
     return data;
   };
 
+  // ---------- 编辑事项标题与时间小标题 ----------
+  const handleUpdateEvent = async (eid: string, updates: { time?: string; title?: string }) => {
+    try {
+      const res = await fetch('/api/tasks/' + eid, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        showToast('修改失败，请重试', 'err');
+        return;
+      }
+      const data = await res.json();
+      if (data.doc) commit(data.doc);
+      else {
+        commit({
+          ...docRef.current,
+          days: docRef.current.days.map((d) => ({
+            ...d,
+            events: d.events.map((ev) => (ev.id === eid ? { ...ev, ...updates } : ev)),
+          })),
+        });
+      }
+      if (updates.time) showToast(`已将时间修改为“${updates.time}”`, 'success');
+      if (updates.title) showToast(`已将标题修改为“${updates.title}”`, 'success');
+    } catch {
+      showToast('网络异常，修改未保存', 'err');
+    }
+  };
+
   // ---------- 修改 ----------
   const updateGroup = (gid: string, fn: (items: Item[]) => Item[]) => {
     let next = mapGroup(docRef.current, gid, fn);
@@ -341,7 +379,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview]);
 
-  const groupProps = { editing, onUpdate: updateGroup, onDelete: deleteItem, showToast };
+  const groupProps = { editing, onUpdate: updateGroup, onDelete: deleteItem, onUpdateEvent: handleUpdateEvent, showToast };
 
   return (
     <>
@@ -372,7 +410,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
               onClick={() => {
                 setEditing((v) => {
                   const next = !v;
-                  showToast(next ? '已开启编辑模式（可增删改明细）' : '已退出编辑模式', 'info');
+                  showToast(next ? '已开启编辑模式（可增删改明细与小标题）' : '已退出编辑模式', 'info');
                   return next;
                 });
               }}
@@ -386,9 +424,23 @@ export default function Checklist({ initial }: { initial: Doc }) {
           <div className="sync" data-s={sync.s} role="status">{sync.text}</div>
         </div>
 
-        {editing && <div className="edit-banner">编辑中：可以增加、修改、删除明细。改完点“完成”回到查看状态。</div>}
+        {editing && <div className="edit-banner">编辑中：可增删改明细、点击小标题修改时间。改完点“完成”回到查看状态。</div>}
 
         <main>
+          {/* 顶部快捷往前新增一天日程 */}
+          <div className="add-day-top-wrap">
+            <button
+              type="button"
+              className="btn add-day-top-btn"
+              onClick={() => {
+                setAddDayDefault(Math.max(1, earliestDay - 1));
+                setShowAddDay(true);
+              }}
+            >
+              ＋ 往前新增一天日程（如 {Math.max(1, earliestDay - 1)} 号）
+            </button>
+          </div>
+
           {doc.days.map((d) => (
             <section className="day" id={'day-' + d.day} key={d.day} aria-label={`${d.day} 号`}>
               <div className="date">
@@ -403,9 +455,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
               </div>
             </section>
           ))}
+
+          {/* 底部往后新增一天日程 */}
           <div className="add-day-wrap">
-            <button type="button" className="btn add-day-btn" onClick={() => setShowAddDay(true)}>
-              ＋ 新增一天日程
+            <button
+              type="button"
+              className="btn add-day-btn"
+              onClick={() => {
+                setAddDayDefault(latestDay + 1);
+                setShowAddDay(true);
+              }}
+            >
+              ＋ 往后新增一天日程（如 {latestDay + 1} 号）
             </button>
           </div>
         </main>
@@ -414,13 +475,21 @@ export default function Checklist({ initial }: { initial: Doc }) {
       {toast && (
         <div className={'toast ' + (toast.type || 'info')} role="status" aria-live="polite">
           <span className="toast-icon" aria-hidden="true">
-            {toast.type === 'success' ? '✓' : toast.type === 'err' ? '✕' : toast.type === 'warn' ? '!' : 'ℹ'}
+            {toast.type === 'success' ? (
+              <CheckIcon size={12} />
+            ) : toast.type === 'err' ? (
+              <CrossIcon size={12} />
+            ) : toast.type === 'warn' ? (
+              <AlertIcon size={12} />
+            ) : (
+              <InfoIcon size={12} />
+            )}
           </span>
-          <span>{toast.text}</span>
+          <span className="toast-text">{toast.text}</span>
           {toast.undo && (
             <button
               type="button"
-              className="btn sm"
+              className="btn sm toast-undo-btn"
               onClick={() => {
                 toast.undo?.();
                 setToast(null);
@@ -434,7 +503,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
 
       {showAddDay && (
         <AddDayModal
-          defaultDay={nextSuggestedDay}
+          defaultDay={addDayDefault}
           existingDays={doc.days.map((d) => d.day)}
           onClose={() => setShowAddDay(false)}
           onAdd={handleAddDay}
@@ -448,7 +517,9 @@ export default function Checklist({ initial }: { initial: Doc }) {
         onClick={() => setShowVoiceModal(true)}
         aria-label="打开 AI 语音助手"
       >
-        <span className="ai-voice-fab-icon" aria-hidden="true">🎙️</span>
+        <span className="ai-voice-fab-icon" aria-hidden="true">
+          <MicIcon size={18} />
+        </span>
         <span>AI 语音</span>
       </button>
 
@@ -591,11 +662,19 @@ type GroupProps = {
   editing: boolean;
   onUpdate: (gid: string, fn: (items: Item[]) => Item[]) => void;
   onDelete: (gid: string, item: Item) => void;
+  onUpdateEvent: (eid: string, updates: { time?: string; title?: string }) => void;
   showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err', undo?: () => void, duration?: number) => void;
 };
 
 function EventBlock({
-  ev, onTask, open, onSection, perSec, ...gp
+  ev,
+  onTask,
+  open,
+  onSection,
+  perSec,
+  onUpdateEvent,
+  showToast,
+  ...gp
 }: GroupProps & {
   ev: Event;
   onTask: (eid: string, done: boolean) => void;
@@ -603,6 +682,45 @@ function EventBlock({
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
 }) {
+  const [editingTime, setEditingTime] = useState(false);
+  const [draftTime, setDraftTime] = useState(ev.time);
+
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(ev.title);
+
+  useEffect(() => {
+    if (!gp.editing) {
+      setEditingTime(false);
+      setEditingTitle(false);
+    }
+  }, [gp.editing]);
+
+  useEffect(() => {
+    setDraftTime(ev.time);
+  }, [ev.time]);
+
+  useEffect(() => {
+    setDraftTitle(ev.title);
+  }, [ev.title]);
+
+  const saveTime = () => {
+    const t = draftTime.trim();
+    if (!t) return;
+    if (t !== ev.time) {
+      onUpdateEvent(ev.id, { time: t });
+    }
+    setEditingTime(false);
+  };
+
+  const saveTitle = () => {
+    const t = draftTitle.trim();
+    if (!t) return;
+    if (t !== ev.title) {
+      onUpdateEvent(ev.id, { title: t });
+    }
+    setEditingTitle(false);
+  };
+
   const allItems = useMemo(() => eventGroups(ev).flatMap((g) => g.items), [ev]);
   const hasItems = allItems.length > 0;
   const doneCount = useMemo(() => allItems.filter((i) => i.done).length, [allItems]);
@@ -610,27 +728,110 @@ function EventBlock({
 
   return (
     <div className={'event' + (ev.done ? ' done' : '')}>
-      <span className="time">{ev.time}</span>
-      <label className="task">
-        <input
-          type="checkbox"
-          id={'task-' + ev.id}
-          checked={ev.done}
-          ref={(el) => {
-            if (el) el.indeterminate = isPartial;
-          }}
-          onChange={() => {
-            const nextDone = isPartial ? true : !ev.done;
-            onTask(ev.id, nextDone);
-          }}
-        />
-        <span className="title">{ev.title}</span>
-      </label>
+      {/* 时间小标题行 */}
+      <div className="time-row">
+        {editingTime ? (
+          <div className="time-editor">
+            <input
+              type="text"
+              className="field"
+              value={draftTime}
+              maxLength={20}
+              placeholder="如：上午、17:30 出发"
+              autoFocus
+              onChange={(e) => setDraftTime(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveTime();
+                if (e.key === 'Escape') setEditingTime(false);
+              }}
+            />
+            <button type="button" className="btn sm primary" onClick={saveTime}>
+              保存
+            </button>
+            <button type="button" className="btn sm quiet" onClick={() => setEditingTime(false)}>
+              取消
+            </button>
+          </div>
+        ) : (
+          <span
+            className={'time' + (gp.editing ? ' editable' : '')}
+            title={gp.editing ? '点击修改小标题/时间' : undefined}
+            onClick={() => {
+              if (gp.editing) {
+                setDraftTime(ev.time);
+                setEditingTime(true);
+              }
+            }}
+          >
+            {ev.time || (gp.editing ? '设置时间' : '')}
+            {gp.editing && <EditPencilIcon size={12} className="edit-hint-icon" />}
+          </span>
+        )}
+      </div>
+
+      {/* 大标题行 */}
+      <div className="task-wrap">
+        {editingTitle ? (
+          <div className="task-editor">
+            <input
+              type="text"
+              className="field"
+              value={draftTitle}
+              maxLength={40}
+              autoFocus
+              onChange={(e) => setDraftTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveTitle();
+                if (e.key === 'Escape') setEditingTitle(false);
+              }}
+            />
+            <button type="button" className="btn sm primary" onClick={saveTitle}>
+              保存
+            </button>
+            <button type="button" className="btn sm quiet" onClick={() => setEditingTitle(false)}>
+              取消
+            </button>
+          </div>
+        ) : (
+          <>
+            <label className="task">
+              <input
+                type="checkbox"
+                className="task-checkbox"
+                id={'task-' + ev.id}
+                checked={ev.done}
+                ref={(el) => {
+                  if (el) el.indeterminate = isPartial;
+                }}
+                onChange={() => {
+                  const nextDone = isPartial ? true : !ev.done;
+                  onTask(ev.id, nextDone);
+                }}
+              />
+              <span className="title">{ev.title}</span>
+            </label>
+            {gp.editing && (
+              <button
+                type="button"
+                className="btn sm quiet"
+                onClick={() => {
+                  setDraftTitle(ev.title);
+                  setEditingTitle(true);
+                }}
+                title="修改标题"
+              >
+                修改
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
       {ev.note && <p className="note">{ev.note}</p>}
       {ev.groups.length > 0 && (
         <div className="direct">
           {ev.groups.map((g) => (
-            <GroupBlock key={g.id} group={g} {...gp} />
+            <GroupBlock key={g.id} group={g} onUpdateEvent={onUpdateEvent} showToast={showToast} {...gp} />
           ))}
         </div>
       )}
@@ -653,7 +854,7 @@ function EventBlock({
             </summary>
             <div className="sec-body">
               {s.groups.map((g) => (
-                <GroupBlock key={g.id} group={g} {...gp} />
+                <GroupBlock key={g.id} group={g} onUpdateEvent={onUpdateEvent} showToast={showToast} {...gp} />
               ))}
             </div>
           </details>
@@ -773,7 +974,13 @@ function ItemRow({
   return (
     <div className="item">
       <label>
-        <input type="checkbox" id={'cb-' + item.id} checked={item.done} onChange={(e) => onToggle(e.target.checked)} />
+        <input
+          type="checkbox"
+          className="item-checkbox"
+          id={'cb-' + item.id}
+          checked={item.done}
+          onChange={(e) => onToggle(e.target.checked)}
+        />
         <span className="t">{item.text}</span>
       </label>
       {editing && (

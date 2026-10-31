@@ -95,14 +95,122 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   background: var(--bg); border: 2px solid var(--red);
 }
 .event.done::before { background: var(--red); }
-.time { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: .05em; color: var(--gold); font-variant-numeric: tabular-nums; }
-.task { display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
-.task .title { font-size: 16.5px; font-weight: 600; line-height: 1.4; }
+
+.time-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.time {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 600; letter-spacing: .05em; color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.time.editable {
+  cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--gold) 35%, transparent);
+  transition: all 0.15s ease;
+}
+.time.editable:hover {
+  background: color-mix(in srgb, var(--gold) 25%, transparent);
+  color: var(--ink);
+}
+.time-editor { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.time-editor .field { width: auto; max-width: 160px; min-height: 32px; padding: 0 8px; font-size: 13px; }
+
+.task-wrap { display: flex; align-items: center; gap: 8px; }
+.task { flex: 1; min-width: 0; display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
+.task .title { font-size: 17px; font-weight: 700; line-height: 1.4; color: var(--ink); }
 .event.done .title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--red); }
+.task-editor { flex: 1; display: flex; align-items: center; gap: 6px; }
+.task-editor .field { flex: 1; min-height: 36px; padding: 0 10px; font-size: 15px; }
+
+.edit-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: all 0.15s ease;
+}
+.edit-icon-btn:hover { background: var(--surface); color: var(--ink); }
+
 .note { margin: 0 0 0 34px; color: var(--muted); font-size: 14px; }
 .direct { margin-left: 34px; }
 
-input[type="checkbox"] { width: 22px; height: 22px; margin: 0; flex: none; accent-color: var(--red); cursor: pointer; }
+/* 大标题复选框：圆形、加粗、主题金红描边 (圆环设计) */
+.task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: var(--surface);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+.task-checkbox:hover {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgb(190 18 60 / 0.15);
+}
+.task-checkbox:checked {
+  background: var(--red);
+  border-color: var(--red);
+}
+.task-checkbox:checked::before {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(0.5px, -0.5px);
+}
+.task-checkbox:indeterminate {
+  background: var(--surface);
+  border-color: var(--gold);
+}
+.task-checkbox:indeterminate::before {
+  content: "";
+  width: 9px;
+  height: 2.5px;
+  background: var(--gold);
+  border-radius: 2px;
+}
+
+/* 小标题/明细复选框：经典方形圆角、柔和边框 */
+.item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 18px;
+  border-radius: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent);
+  background: var(--surface);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+.item-checkbox:hover {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 2px rgb(22 163 74 / 0.18);
+}
+.item-checkbox:checked {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.item-checkbox:checked::before {
+  content: "";
+  width: 8px;
+  height: 4.5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(0.5px, -0.5px);
+}
 
 .sec { margin-top: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
 .sec > summary {
@@ -143,24 +251,78 @@ input[type="checkbox"] { width: 22px; height: 22px; margin: 0; flex: none; accen
 .toast {
   position: fixed; z-index: 50; left: 50%; transform: translateX(-50%);
   bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  width: min(440px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 16px;
-  background: var(--toast-bg); color: var(--toast-fg); border-radius: 14px;
-  box-shadow: 0 8px 30px rgb(0 0 0 / .24); border: 1px solid color-mix(in srgb, var(--toast-fg) 15%, transparent);
-  animation: toast-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  display: flex; align-items: center; gap: 9px; padding: 9px 16px 9px 14px;
+  background: var(--toast-bg); color: var(--toast-fg); border-radius: 999px;
+  box-shadow: 0 10px 32px rgb(0 0 0 / .32); border: 1px solid color-mix(in srgb, var(--toast-fg) 20%, transparent);
+  animation: toast-slide-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
 }
 @keyframes toast-slide-up {
-  from { opacity: 0; transform: translate(-50%, 16px); }
+  from { opacity: 0; transform: translate(-50%, 14px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
-.toast-icon { flex: none; font-size: 16px; display: inline-flex; align-items: center; justify-content: center; }
-.toast.success .toast-icon { color: var(--ok); }
-.toast.info .toast-icon { color: var(--gold); }
-.toast.err .toast-icon { color: var(--red); }
-.toast span { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; line-height: 1.4; }
-.toast .btn { background: transparent; color: var(--toast-fg); border-color: color-mix(in srgb, var(--toast-fg) 40%, transparent); min-height: 32px; padding: 0 10px; font-size: 13px; }
+.toast-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.toast.success .toast-icon { background: color-mix(in srgb, var(--ok) 30%, transparent); color: var(--ok); }
+.toast.info .toast-icon { background: color-mix(in srgb, var(--gold) 30%, transparent); color: var(--gold); }
+.toast.err .toast-icon { background: color-mix(in srgb, var(--red) 30%, transparent); color: var(--red); }
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .toast { border-radius: 14px; }
+  .toast-text { white-space: normal; overflow-wrap: anywhere; }
+}
+.toast .toast-undo-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--toast-fg);
+  border-color: color-mix(in srgb, var(--toast-fg) 40%, transparent);
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border-radius: 999px;
+  margin-left: 4px;
+}
 
-/* 增加日期按钮与浮窗 */
+/* 增加日期按钮（顶部快捷往前 & 底部往后） */
+.add-day-top-wrap {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--line);
+  display: flex;
+  justify-content: center;
+}
+.add-day-top-btn {
+  width: 100%;
+  max-width: 320px;
+  min-height: 42px;
+  border: 1.5px dashed var(--gold);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: var(--r);
+  transition: all 0.2s ease;
+}
+.add-day-top-btn:hover {
+  background: color-mix(in srgb, var(--gold) 20%, transparent);
+}
+
 .add-day-wrap { margin-top: 36px; padding-top: 20px; border-top: 1px dashed var(--line); display: flex; justify-content: center; }
 .add-day-btn {
   width: 100%; max-width: 320px; min-height: 48px; border: 1.5px dashed var(--red);

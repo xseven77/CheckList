@@ -112,6 +112,18 @@ export function setTaskDone(id: string, done: boolean): Promise<Change> {
   });
 }
 
+export function updateEvent(id: string, updates: { time?: string; title?: string; note?: string }): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const ev = findEvent(doc, id);
+    if (!ev) throw new NotFoundError(id);
+    if (typeof updates.time === 'string') ev.time = updates.time.trim();
+    if (typeof updates.title === 'string' && updates.title.trim()) ev.title = updates.title.trim();
+    if (typeof updates.note === 'string') ev.note = updates.note.trim();
+    return commit(doc, { type: 'doc', doc });
+  });
+}
+
 export function addDay(day: number, initialEvent?: { title?: string; time?: string }): Promise<Change> {
   return serial(async () => {
     const doc = await readState();

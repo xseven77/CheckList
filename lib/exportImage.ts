@@ -28,7 +28,7 @@ type Op =
   | { k: 'seal'; x: number; y: number }
   | { k: 'box'; x: number; y: number; w: number; h: number; bg?: string; border?: string; r?: number }
   | { k: 'vline'; x: number; y1: number; y2: number }
-  | { k: 'checkbox'; x: number; y: number; size: number; checked: boolean; indeterminate?: boolean }
+  | { k: 'checkbox'; x: number; y: number; size: number; checked: boolean; indeterminate?: boolean; isCircle?: boolean }
   | { k: 'tag'; s: string; x: number; y: number; w: number; h: number; bg: string; color: string; border?: string }
   | { k: 'pill'; text: string; x: number; y: number; w: number; h: number; bg: string; color: string; border?: string }
   | { k: 'bar'; x: number; y: number; w: number; h: number; pct: number };
@@ -218,7 +218,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       const evDoneCount = allEvItems.filter((i) => i.done).length;
       const evPartial = evHasItems && evDoneCount > 0 && evDoneCount < allEvItems.length;
 
-      ops.push({ k: 'checkbox', x: CX, y: y + 4, size: evBoxSize, checked: ev.done, indeterminate: evPartial });
+      ops.push({ k: 'checkbox', x: CX, y: y + 4, size: evBoxSize, checked: ev.done, indeterminate: evPartial, isCircle: true });
       text(ev.title, CX + 34, CW - 34, 28, ev.done ? P.muted : P.ink, 600, SANS, 1.35, ev.done, P.strike);
 
       // 备注
@@ -405,33 +405,48 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
   // 第二层：图元与控件（复选框、节点、进度条、徽章）
   for (const o of ops) {
     if (o.k === 'checkbox') {
-      roundPath(o.x, o.y, o.size, o.size, 5);
-      if (o.checked) {
-        ctx.fillStyle = P.red;
-        ctx.fill();
-        drawCheckmark(o.x, o.y, o.size, '#ffffff');
-      } else if (o.indeterminate) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.strokeStyle = P.red;
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
-        // 绘制半选中减号 -
-        ctx.save();
-        ctx.strokeStyle = P.red;
-        ctx.lineWidth = 2.4;
-        ctx.lineCap = 'round';
+      if (o.isCircle) {
         ctx.beginPath();
-        ctx.moveTo(o.x + o.size * 0.25, o.y + o.size * 0.5);
-        ctx.lineTo(o.x + o.size * 0.75, o.y + o.size * 0.5);
-        ctx.stroke();
-        ctx.restore();
+        ctx.arc(o.x + o.size / 2, o.y + o.size / 2, o.size / 2, 0, Math.PI * 2);
+        if (o.checked) {
+          ctx.fillStyle = P.red;
+          ctx.fill();
+          drawCheckmark(o.x, o.y, o.size, '#ffffff');
+        } else if (o.indeterminate) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = P.gold;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.save();
+          ctx.strokeStyle = P.gold;
+          ctx.lineWidth = 2.4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(o.x + o.size * 0.28, o.y + o.size * 0.5);
+          ctx.lineTo(o.x + o.size * 0.72, o.y + o.size * 0.5);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = P.gold;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       } else {
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.strokeStyle = P.checkboxBorder;
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
+        roundPath(o.x, o.y, o.size, o.size, 4);
+        if (o.checked) {
+          ctx.fillStyle = P.okGreen;
+          ctx.fill();
+          drawCheckmark(o.x, o.y, o.size, '#ffffff');
+        } else {
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = P.checkboxBorder;
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        }
       }
     } else if (o.k === 'dot') {
       ctx.beginPath();

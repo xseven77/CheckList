@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { type Checklist as Doc } from '@/lib/types';
+import { MicIcon, SparklesIcon } from './Icons';
 
 type VoiceModalProps = {
   isOpen: boolean;
@@ -52,7 +53,7 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setErr('当前浏览器未开放 Web Speech API 接口，建议直接在下方输入框打字，或使用手机输入法的自带语音输入 🎙️');
+      setErr('当前浏览器未开放 Web Speech API 接口，建议直接在下方输入框打字，或使用手机输入法的自带语音输入。');
       return;
     }
 
@@ -147,7 +148,7 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
       <div className="voice-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="voice-modal-header">
           <h2>
-            <span role="img" aria-label="microphone">🎙️</span>
+            <MicIcon size={22} className="voice-header-icon" />
             AI 语音助手
           </h2>
           <button type="button" className="btn sm quiet" onClick={onClose} disabled={submitting}>
@@ -171,7 +172,7 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
             onMouseUp={handleHoldEnd}
             aria-label={isRecording ? '正在录音，松开结束' : '长按讲话'}
           >
-            🎙️
+            <MicIcon size={32} />
           </button>
           <div className={'voice-hint' + (isRecording ? ' active' : '')}>
             {isRecording ? '松开结束识别…' : '按住讲话 · 松开完成'}
@@ -232,7 +233,8 @@ export default function VoiceModal({ isOpen, onClose, onApplyAI, showToast }: Vo
             onClick={() => handleSubmit()}
             disabled={submitting || !text.trim()}
           >
-            {submitting ? '✨ AI 解析中…' : '✨ 确认识别，让 AI 转换配置'}
+            <SparklesIcon size={16} />
+            <span>{submitting ? 'AI 解析中…' : '确认识别，让 AI 转换配置'}</span>
           </button>
         </div>
       </div>
