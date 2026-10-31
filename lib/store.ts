@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { type Change, type ChangeInput, type Checklist, type Item, eventGroups, findEvent, findEventByGroup, findGroup } from './types';
+import { type Change, type ChangeInput, type Checklist, type Event, type Item, eventGroups, findEvent, findEventByGroup, findGroup } from './types';
 
 // 数据目录：state.json 是实时数据；第一次启动时从 seed.json 复制一份
 const DATA_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.DATA_DIR || path.join(process.cwd(), 'data'));
@@ -109,6 +109,43 @@ export function setTaskDone(id: string, done: boolean): Promise<Change> {
     }
 
     return commit(doc, { type: 'task', id, done, groups: updatedGroups });
+  });
+}
+
+export function addDay(day: number, initialEvent?: { title?: string; time?: string }): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    let targetDay = doc.days.find((d) => d.day === day);
+    const evTitle = initialEvent?.title?.trim() || '全天安排';
+    const evTime = initialEvent?.time?.trim() || '全天';
+    const newEvent: Event = {
+      id: 'e' + day + '_' + Math.random().toString(36).slice(2, 7),
+      time: evTime,
+      title: evTitle,
+      note: '',
+      done: false,
+      groups: [
+        {
+          id: 'g' + day + '_' + Math.random().toString(36).slice(2, 7),
+          label: '待办明细',
+          items: [],
+        },
+      ],
+      sections: [],
+    };
+
+    if (targetDay) {
+      targetDay.events.push(newEvent);
+    } else {
+      targetDay = {
+        day,
+        events: [newEvent],
+      };
+      doc.days.push(targetDay);
+      doc.days.sort((a, b) => a.day - b.day);
+    }
+
+    return commit(doc, { type: 'doc', doc });
   });
 }
 

@@ -28,11 +28,13 @@ export type Checklist = {
 /** 服务端推送给页面的单条变更 */
 export type Change =
   | { type: 'group'; id: string; items: Item[]; eventDone?: { id: string; done: boolean }; rev: number }
-  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[]; rev: number };
+  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[]; rev: number }
+  | { type: 'doc'; doc: Checklist; rev: number };
 
 export type ChangeInput =
   | { type: 'group'; id: string; items: Item[]; eventDone?: { id: string; done: boolean } }
-  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[] };
+  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[] }
+  | { type: 'doc'; doc: Checklist };
 
 export const LIMITS = { items: 200, text: 160 } as const;
 

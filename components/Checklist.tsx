@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
 
@@ -87,10 +87,33 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [editing, setEditing] = useState(false);
   const [sync, setSync] = useState<SyncState>({ s: 'wait', text: '正在连接…' });
   const [writer] = useState(() => createWriter(setSync));
-  const [toast, setToast] = useState<{ text: string; undo: () => void } | null>(null);
+  const [toast, setToast] = useState<{
+    text: string;
+    type?: 'success' | 'info' | 'warn' | 'err';
+    undo?: () => void;
+  } | null>(null);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback(
+    (text: string, type: 'success' | 'info' | 'warn' | 'err' = 'info', undo?: () => void, duration = 2800) => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToast({ text, type, undo });
+      toastTimerRef.current = setTimeout(() => {
+        setToast(null);
+      }, undo ? 8000 : duration);
+    },
+    []
+  );
+
   const [preview, setPreview] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [showAddDay, setShowAddDay] = useState(false);
+
+  const nextSuggestedDay = useMemo(() => {
+    const days = doc.days.map((d) => d.day);
+    return days.length ? Math.max(...days) + 1 : 1;
+  }, [doc.days]);
 
   // ---------- 实时同步 ----------
   useEffect(() => {
@@ -142,6 +165,9 @@ export default function Checklist({ initial }: { initial: Doc }) {
         }
         commit(next);
       }
+      if (c.type === 'doc' && c.doc) {
+        commit(c.doc);
+      }
     };
     return () => es.close();
   }, [writer]);
@@ -159,6 +185,29 @@ export default function Checklist({ initial }: { initial: Doc }) {
       } catch {}
       return next;
     });
+  };
+
+  // ---------- 日期拓展 ----------
+  const handleAddDay = async (day: number, title?: string, time?: string) => {
+    const res = await fetch('/api/days', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ day, title, time }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || '添加失败');
+    }
+    const data = await res.json();
+    if (data.doc) {
+      commit(data.doc);
+    }
+    showToast(`已成功新增 ${day} 号日程！`, 'success');
+    setShowAddDay(false);
+    setTimeout(() => {
+      const el = document.getElementById(`day-${day}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   // ---------- 修改 ----------
@@ -183,28 +232,27 @@ export default function Checklist({ initial }: { initial: Doc }) {
     const next = mapEventCascade(docRef.current, eid, done);
     commit(next);
     writer.send('tasks/' + eid, { done });
+    showToast(done ? '已完成该事项及所属全部明细' : '已取消勾选事项', 'info');
   };
   const deleteItem = (gid: string, item: Item) => {
     const index = findGroup(docRef.current, gid)?.items.findIndex((i) => i.id === item.id) ?? -1;
     if (index < 0) return;
     updateGroup(gid, (items) => items.filter((i) => i.id !== item.id));
-    setToast({
-      text: `已删除“${item.text}”`,
-      undo: () =>
+    showToast(
+      `已删除“${item.text}”`,
+      'info',
+      () => {
         updateGroup(gid, (items) => {
           if (items.some((i) => i.id === item.id)) return items;
           const copy = items.slice();
           copy.splice(Math.min(index, copy.length), 0, item);
           return copy;
-        }),
-    });
+        });
+        showToast(`已恢复“${item.text}”`, 'success');
+      },
+      8000
+    );
   };
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 8000);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   // ---------- 进度 ----------
   const counts = useMemo(() => {
@@ -242,11 +290,16 @@ export default function Checklist({ initial }: { initial: Doc }) {
   // ---------- 导出长图 ----------
   const doExport = async () => {
     setExporting(true);
+    showToast('正在生成长图…', 'info', undefined, 1500);
     try {
       const blob = await drawChecklist(docRef.current);
       setPreview(URL.createObjectURL(blob));
+      showToast('长图已生成并开启预览', 'success');
     } catch (e) {
-      setSync({ s: 'err', text: e instanceof Error && e.message === 'too-long' ? '清单太长，删掉一些明细后再导出' : '长图生成失败，请再试一次' });
+      showToast(
+        e instanceof Error && e.message === 'too-long' ? '清单太长，删掉一些明细后再导出' : '长图生成失败，请再试一次',
+        'err'
+      );
     } finally {
       setExporting(false);
     }
@@ -268,7 +321,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview]);
 
-  const groupProps = { editing, onUpdate: updateGroup, onDelete: deleteItem };
+  const groupProps = { editing, onUpdate: updateGroup, onDelete: deleteItem, showToast };
 
   return (
     <>
@@ -292,7 +345,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
             </div>
           </div>
           <div className="actions">
-            <button type="button" className="btn primary" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
+            <button
+              type="button"
+              className="btn primary"
+              aria-pressed={editing}
+              onClick={() => {
+                setEditing((v) => {
+                  const next = !v;
+                  showToast(next ? '已开启编辑模式（可增删改明细）' : '已退出编辑模式', 'info');
+                  return next;
+                });
+              }}
+            >
               {editing ? '完成' : '编辑'}
             </button>
             <button type="button" className="btn" onClick={doExport} disabled={exporting}>
@@ -306,7 +370,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
 
         <main>
           {doc.days.map((d) => (
-            <section className="day" key={d.day} aria-label={`${d.day} 号`}>
+            <section className="day" id={'day-' + d.day} key={d.day} aria-label={`${d.day} 号`}>
               <div className="date">
                 {d.day}
                 <span className="unit">号</span>
@@ -319,29 +383,55 @@ export default function Checklist({ initial }: { initial: Doc }) {
               </div>
             </section>
           ))}
+          <div className="add-day-wrap">
+            <button type="button" className="btn add-day-btn" onClick={() => setShowAddDay(true)}>
+              ＋ 新增一天日程
+            </button>
+          </div>
         </main>
       </div>
 
       {toast && (
-        <div className="toast">
+        <div className={'toast ' + (toast.type || 'info')} role="status" aria-live="polite">
+          <span className="toast-icon" aria-hidden="true">
+            {toast.type === 'success' ? '✓' : toast.type === 'err' ? '✕' : toast.type === 'warn' ? '!' : 'ℹ'}
+          </span>
           <span>{toast.text}</span>
-          <button
-            type="button"
-            className="btn sm"
-            onClick={() => {
-              toast.undo();
-              setToast(null);
-            }}
-          >
-            撤销
-          </button>
+          {toast.undo && (
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => {
+                toast.undo?.();
+                setToast(null);
+              }}
+            >
+              撤销
+            </button>
+          )}
         </div>
+      )}
+
+      {showAddDay && (
+        <AddDayModal
+          defaultDay={nextSuggestedDay}
+          existingDays={doc.days.map((d) => d.day)}
+          onClose={() => setShowAddDay(false)}
+          onAdd={handleAddDay}
+        />
       )}
 
       {preview && (
         <div className="preview" role="dialog" aria-modal="true" aria-label="长图预览">
           <div className="preview-bar">
-            <a className="btn primary" href={preview} download={`${doc.title}.png`}>保存图片</a>
+            <a
+              className="btn primary"
+              href={preview}
+              download={`${doc.title}.png`}
+              onClick={() => showToast('正在保存长图…', 'success')}
+            >
+              保存图片
+            </a>
             <button type="button" className="btn" onClick={closePreview} autoFocus>关闭</button>
             <p>手机上也可以长按图片保存到相册。</p>
           </div>
@@ -353,10 +443,117 @@ export default function Checklist({ initial }: { initial: Doc }) {
   );
 }
 
+function AddDayModal({
+  defaultDay,
+  existingDays,
+  onClose,
+  onAdd,
+}: {
+  defaultDay: number;
+  existingDays: number[];
+  onClose: () => void;
+  onAdd: (day: number, title?: string, time?: string) => Promise<void>;
+}) {
+  const [day, setDay] = useState(defaultDay);
+  const [title, setTitle] = useState('');
+  const [time, setTime] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      setErr('请输入 1 到 31 之间的有效数字');
+      return;
+    }
+    setSubmitting(true);
+    setErr('');
+    try {
+      await onAdd(day, title, time);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '新增失败，请稍后重试';
+      setErr(msg);
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="新增日期日程">
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h2>新增日期日程</h2>
+        <p className="sub">为清单增加新的日程（例如 8 号、9 号），自动实时同步给所有人。</p>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          <div className="modal-field">
+            <label htmlFor="modal-day">几号 (1-31 日)</label>
+            <input
+              id="modal-day"
+              type="number"
+              min={1}
+              max={31}
+              className="field"
+              value={day}
+              onChange={(e) => setDay(parseInt(e.target.value, 10))}
+              required
+              autoFocus
+            />
+            {existingDays.includes(day) && (
+              <small style={{ color: 'var(--gold)', marginTop: 4, display: 'block' }}>
+                提示：当前清单已存在 {day} 号，提交将在该日期下新增一个事项段落。
+              </small>
+            )}
+          </div>
+          <div className="modal-field">
+            <label htmlFor="modal-title">主要事项标题（可选）</label>
+            <input
+              id="modal-title"
+              type="text"
+              className="field"
+              placeholder="如：全天安排、归还礼服、答谢宴"
+              value={title}
+              maxLength={40}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="modal-field">
+            <label htmlFor="modal-time">时间段（可选）</label>
+            <input
+              id="modal-time"
+              type="text"
+              className="field"
+              placeholder="如：全天、上午、10:00 出发"
+              value={time}
+              maxLength={20}
+              onChange={(e) => setTime(e.target.value)}
+            />
+          </div>
+          {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={onClose} disabled={submitting}>
+              取消
+            </button>
+            <button type="submit" className="btn primary" disabled={submitting}>
+              {submitting ? '正在添加…' : '确认新增'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 type GroupProps = {
   editing: boolean;
   onUpdate: (gid: string, fn: (items: Item[]) => Item[]) => void;
   onDelete: (gid: string, item: Item) => void;
+  showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err', undo?: () => void, duration?: number) => void;
 };
 
 function EventBlock({
@@ -428,7 +625,7 @@ function EventBlock({
   );
 }
 
-function GroupBlock({ group, editing, onUpdate, onDelete }: GroupProps & { group: Group }) {
+function GroupBlock({ group, editing, onUpdate, onDelete, showToast }: GroupProps & { group: Group }) {
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const placeholder = group.label ? `增加到「${group.label}」` : '增加一条明细';
@@ -442,8 +639,14 @@ function GroupBlock({ group, editing, onUpdate, onDelete }: GroupProps & { group
             key={item.id}
             item={item}
             editing={editing}
-            onToggle={(done) => onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, done } : i)))}
-            onRename={(text) => onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, text } : i)))}
+            onToggle={(done) => {
+              onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, done } : i)));
+              showToast(done ? `已完成「${item.text}」` : `已取消勾选「${item.text}」`, 'info');
+            }}
+            onRename={(text) => {
+              onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, text } : i)));
+              showToast(`已更新为“${text}”`, 'success');
+            }}
             onDelete={() => onDelete(group.id, item)}
           />
         ))}
@@ -457,6 +660,7 @@ function GroupBlock({ group, editing, onUpdate, onDelete }: GroupProps & { group
             if (!text) return inputRef.current?.focus();
             if (group.items.length >= LIMITS.items) return;
             onUpdate(group.id, (items) => [...items, { id: newId(), text, done: false }]);
+            showToast(`已增加明细「${text}」`, 'success');
             setDraft('');
             inputRef.current?.focus();
           }}

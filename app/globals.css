@@ -141,14 +141,53 @@ input[type="checkbox"] { width: 22px; height: 22px; margin: 0; flex: none; accen
 .confirm p { flex-basis: 100%; margin: 0; font-size: 14px; }
 
 .toast {
-  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  position: fixed; z-index: 50; left: 50%; transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   width: min(440px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px;
-  background: var(--toast-bg); color: var(--toast-fg); border-radius: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .18);
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 16px;
+  background: var(--toast-bg); color: var(--toast-fg); border-radius: 14px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / .24); border: 1px solid color-mix(in srgb, var(--toast-fg) 15%, transparent);
+  animation: toast-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.toast span { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
-.toast .btn { background: transparent; color: var(--toast-fg); border-color: color-mix(in srgb, var(--toast-fg) 40%, transparent); }
+@keyframes toast-slide-up {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.toast-icon { flex: none; font-size: 16px; display: inline-flex; align-items: center; justify-content: center; }
+.toast.success .toast-icon { color: var(--ok); }
+.toast.info .toast-icon { color: var(--gold); }
+.toast.err .toast-icon { color: var(--red); }
+.toast span { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; line-height: 1.4; }
+.toast .btn { background: transparent; color: var(--toast-fg); border-color: color-mix(in srgb, var(--toast-fg) 40%, transparent); min-height: 32px; padding: 0 10px; font-size: 13px; }
+
+/* 增加日期按钮与浮窗 */
+.add-day-wrap { margin-top: 36px; padding-top: 20px; border-top: 1px dashed var(--line); display: flex; justify-content: center; }
+.add-day-btn {
+  width: 100%; max-width: 320px; min-height: 48px; border: 1.5px dashed var(--red);
+  background: var(--red-soft); color: var(--red); font-weight: 600; font-size: 15px; border-radius: var(--r);
+  transition: all 0.2s ease;
+}
+.add-day-btn:hover { background: color-mix(in srgb, var(--red-soft) 80%, var(--red) 20%); }
+
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .45);
+  backdrop-filter: blur(4px); display: grid; place-items: center;
+  padding: 16px;
+  animation: fade-in 0.2s ease;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal-card {
+  background: var(--surface); width: 100%; max-width: 440px; border-radius: 18px;
+  border: 1px solid var(--line); box-shadow: 0 12px 40px rgb(0 0 0 / .16); padding: 22px 20px;
+}
+.modal-card h2 { margin: 0 0 8px; font: 700 22px/1.3 var(--display); color: var(--ink); }
+.modal-card p.sub { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); }
+.modal-form { display: grid; gap: 14px; }
+.modal-field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 
 .preview {
   position: fixed; inset: 0; z-index: 30; overflow: auto; background: var(--bg);
