@@ -299,37 +299,96 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   margin-left: 4px;
 }
 
-/* 增加日期按钮（顶部快捷往前 & 底部往后） */
+/* 增加日期按钮与分割线优化：增加呼吸感与现代轻量质感 */
 .add-day-top-wrap {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px dashed var(--line);
+  margin: 32px 0 24px;
+  position: relative;
   display: flex;
+  align-items: center;
   justify-content: center;
 }
+.add-day-top-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--line);
+  opacity: 0.6;
+}
 .add-day-top-btn {
-  width: 100%;
-  max-width: 320px;
-  min-height: 42px;
-  border: 1.5px dashed var(--gold);
-  background: color-mix(in srgb, var(--gold) 10%, transparent);
-  color: var(--gold);
-  font-weight: 600;
-  font-size: 14px;
-  border-radius: var(--r);
-  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 22px;
+  font-size: 13.5px;
+  font-weight: 500;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / .04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .add-day-top-btn:hover {
-  background: color-mix(in srgb, var(--gold) 20%, transparent);
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+  background: var(--surface);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgb(0 0 0 / .08);
+}
+.add-day-top-btn:active {
+  transform: translateY(0);
 }
 
-.add-day-wrap { margin-top: 36px; padding-top: 20px; border-top: 1px dashed var(--line); display: flex; justify-content: center; }
-.add-day-btn {
-  width: 100%; max-width: 320px; min-height: 48px; border: 1.5px dashed var(--red);
-  background: var(--red-soft); color: var(--red); font-weight: 600; font-size: 15px; border-radius: var(--r);
-  transition: all 0.2s ease;
+.add-day-wrap {
+  margin: 48px 0 40px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.add-day-btn:hover { background: color-mix(in srgb, var(--red-soft) 80%, var(--red) 20%); }
+.add-day-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--line);
+  opacity: 0.6;
+}
+.add-day-btn {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 26px;
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / .04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.add-day-btn:hover {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 60%, transparent);
+  background: var(--surface);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgb(0 0 0 / .08);
+}
+.add-day-btn:active {
+  transform: translateY(0);
+}
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .45);

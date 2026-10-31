@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
 import VoiceModal from '@/components/VoiceModal';
-import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon } from '@/components/Icons';
+import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon, PlusIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
@@ -431,13 +431,14 @@ export default function Checklist({ initial }: { initial: Doc }) {
           <div className="add-day-top-wrap">
             <button
               type="button"
-              className="btn add-day-top-btn"
+              className="add-day-top-btn"
               onClick={() => {
                 setAddDayDefault(Math.max(1, earliestDay - 1));
                 setShowAddDay(true);
               }}
             >
-              ＋ 往前新增一天日程（如 {Math.max(1, earliestDay - 1)} 号）
+              <PlusIcon size={13} />
+              <span>往前新增一天日程（如 {Math.max(1, earliestDay - 1)} 号）</span>
             </button>
           </div>
 
@@ -460,13 +461,14 @@ export default function Checklist({ initial }: { initial: Doc }) {
           <div className="add-day-wrap">
             <button
               type="button"
-              className="btn add-day-btn"
+              className="add-day-btn"
               onClick={() => {
                 setAddDayDefault(latestDay + 1);
                 setShowAddDay(true);
               }}
             >
-              ＋ 往后新增一天日程（如 {latestDay + 1} 号）
+              <PlusIcon size={14} />
+              <span>往后新增一天日程（如 {latestDay + 1} 号）</span>
             </button>
           </div>
         </main>
