@@ -28,7 +28,7 @@ type Op =
   | { k: 'seal'; x: number; y: number }
   | { k: 'box'; x: number; y: number; w: number; h: number; bg?: string; border?: string; r?: number }
   | { k: 'vline'; x: number; y1: number; y2: number }
-  | { k: 'checkbox'; x: number; y: number; size: number; checked: boolean }
+  | { k: 'checkbox'; x: number; y: number; size: number; checked: boolean; indeterminate?: boolean }
   | { k: 'tag'; s: string; x: number; y: number; w: number; h: number; bg: string; color: string; border?: string }
   | { k: 'pill'; text: string; x: number; y: number; w: number; h: number; bg: string; color: string; border?: string }
   | { k: 'bar'; x: number; y: number; w: number; h: number; pct: number };
@@ -211,9 +211,14 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       // 时间
       text(ev.time, CX, CW, 20, P.gold, 600);
 
-      // 事件标题（自身也可勾选）
+      // 事件标题（自身也可勾选，联动计算完成/半选状态）
       const evBoxSize = 22;
-      ops.push({ k: 'checkbox', x: CX, y: y + 4, size: evBoxSize, checked: ev.done });
+      const allEvItems = eventGroups(ev).flatMap((g) => g.items);
+      const evHasItems = allEvItems.length > 0;
+      const evDoneCount = allEvItems.filter((i) => i.done).length;
+      const evPartial = evHasItems && evDoneCount > 0 && evDoneCount < allEvItems.length;
+
+      ops.push({ k: 'checkbox', x: CX, y: y + 4, size: evBoxSize, checked: ev.done, indeterminate: evPartial });
       text(ev.title, CX + 34, CW - 34, 28, ev.done ? P.muted : P.ink, 600, SANS, 1.35, ev.done, P.strike);
 
       // 备注
@@ -405,6 +410,22 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
         ctx.fillStyle = P.red;
         ctx.fill();
         drawCheckmark(o.x, o.y, o.size, '#ffffff');
+      } else if (o.indeterminate) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = P.red;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        // 绘制半选中减号 -
+        ctx.save();
+        ctx.strokeStyle = P.red;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(o.x + o.size * 0.25, o.y + o.size * 0.5);
+        ctx.lineTo(o.x + o.size * 0.75, o.y + o.size * 0.5);
+        ctx.stroke();
+        ctx.restore();
       } else {
         ctx.fillStyle = '#ffffff';
         ctx.fill();

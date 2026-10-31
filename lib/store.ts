@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { type Change, type ChangeInput, type Checklist, type Item, findEvent, findGroup } from './types';
+import { type Change, type ChangeInput, type Checklist, type Item, eventGroups, findEvent, findEventByGroup, findGroup } from './types';
 
 // 数据目录：state.json 是实时数据；第一次启动时从 seed.json 复制一份
 const DATA_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.DATA_DIR || path.join(process.cwd(), 'data'));
@@ -75,7 +75,22 @@ export function setGroupItems(id: string, items: Item[]): Promise<Change> {
     const group = findGroup(doc, id);
     if (!group) throw new NotFoundError(id);
     group.items = items;
-    return commit(doc, { type: 'group', id, items });
+
+    // 联动：检查所属事项的所有小标题是否已全部勾选
+    const ev = findEventByGroup(doc, id);
+    let eventDone: { id: string; done: boolean } | undefined;
+    if (ev) {
+      const allItems = eventGroups(ev).flatMap((g) => g.items);
+      if (allItems.length > 0) {
+        const allDone = allItems.every((i) => i.done);
+        if (ev.done !== allDone) {
+          ev.done = allDone;
+          eventDone = { id: ev.id, done: allDone };
+        }
+      }
+    }
+
+    return commit(doc, { type: 'group', id, items, eventDone });
   });
 }
 
@@ -85,7 +100,15 @@ export function setTaskDone(id: string, done: boolean): Promise<Change> {
     const ev = findEvent(doc, id);
     if (!ev) throw new NotFoundError(id);
     ev.done = done;
-    return commit(doc, { type: 'task', id, done });
+
+    // 联动：大标题勾选/取消勾选，同步级联更新所属的所有小标题
+    const updatedGroups: { id: string; items: Item[] }[] = [];
+    for (const g of eventGroups(ev)) {
+      g.items = g.items.map((i) => ({ ...i, done }));
+      updatedGroups.push({ id: g.id, items: g.items });
+    }
+
+    return commit(doc, { type: 'task', id, done, groups: updatedGroups });
   });
 }
 

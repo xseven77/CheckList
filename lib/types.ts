@@ -27,12 +27,12 @@ export type Checklist = {
 
 /** 服务端推送给页面的单条变更 */
 export type Change =
-  | { type: 'group'; id: string; items: Item[]; rev: number }
-  | { type: 'task'; id: string; done: boolean; rev: number };
+  | { type: 'group'; id: string; items: Item[]; eventDone?: { id: string; done: boolean }; rev: number }
+  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[]; rev: number };
 
 export type ChangeInput =
-  | { type: 'group'; id: string; items: Item[] }
-  | { type: 'task'; id: string; done: boolean };
+  | { type: 'group'; id: string; items: Item[]; eventDone?: { id: string; done: boolean } }
+  | { type: 'task'; id: string; done: boolean; groups?: { id: string; items: Item[] }[] };
 
 export const LIMITS = { items: 200, text: 160 } as const;
 
@@ -46,6 +46,16 @@ export function findGroup(doc: Checklist, id: string): Group | undefined {
 
 export function findEvent(doc: Checklist, id: string): Event | undefined {
   for (const d of doc.days) for (const ev of d.events) if (ev.id === id) return ev;
+}
+
+export function findEventByGroup(doc: Checklist, gid: string): Event | undefined {
+  for (const d of doc.days) {
+    for (const ev of d.events) {
+      for (const g of eventGroups(ev)) {
+        if (g.id === gid) return ev;
+      }
+    }
+  }
 }
 
 /** 校验并整理客户端提交的明细列表，不合法时返回 null */

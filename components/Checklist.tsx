@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
-import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findGroup } from '@/lib/types';
+import { type Change, type Checklist as Doc, type Event, type Group, type Item, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
@@ -23,6 +23,28 @@ function mapGroup(doc: Doc, gid: string, fn: (items: Item[]) => Item[]): Doc {
 
 function mapEvent(doc: Doc, eid: string, done: boolean): Doc {
   return { ...doc, days: doc.days.map((d) => ({ ...d, events: d.events.map((ev) => (ev.id === eid ? { ...ev, done } : ev)) })) };
+}
+
+function mapEventCascade(doc: Doc, eid: string, done: boolean): Doc {
+  return {
+    ...doc,
+    days: doc.days.map((d) => ({
+      ...d,
+      events: d.events.map((ev) => {
+        if (ev.id !== eid) return ev;
+        const setDone = (items: Item[]) => items.map((i) => ({ ...i, done }));
+        return {
+          ...ev,
+          done,
+          groups: ev.groups.map((g) => ({ ...g, items: setDone(g.items) })),
+          sections: ev.sections.map((s) => ({
+            ...s,
+            groups: s.groups.map((g) => ({ ...g, items: setDone(g.items) })),
+          })),
+        };
+      }),
+    })),
+  };
 }
 
 /** 每个接口地址同一时间只发一个请求；排队期间只保留最新的一次 */
@@ -104,8 +126,22 @@ export default function Checklist({ initial }: { initial: Doc }) {
       } catch {
         return;
       }
-      if (c.type === 'group' && !writer.pending('groups/' + c.id)) commit(mapGroup(docRef.current, c.id, () => c.items));
-      if (c.type === 'task' && !writer.pending('tasks/' + c.id)) commit(mapEvent(docRef.current, c.id, c.done));
+      if (c.type === 'group' && !writer.pending('groups/' + c.id)) {
+        let next = mapGroup(docRef.current, c.id, () => c.items);
+        if (c.eventDone) {
+          next = mapEvent(next, c.eventDone.id, c.eventDone.done);
+        }
+        commit(next);
+      }
+      if (c.type === 'task' && !writer.pending('tasks/' + c.id)) {
+        let next = mapEvent(docRef.current, c.id, c.done);
+        if (c.groups) {
+          for (const g of c.groups) {
+            next = mapGroup(next, g.id, () => g.items);
+          }
+        }
+        commit(next);
+      }
     };
     return () => es.close();
   }, [writer]);
@@ -127,12 +163,25 @@ export default function Checklist({ initial }: { initial: Doc }) {
 
   // ---------- 修改 ----------
   const updateGroup = (gid: string, fn: (items: Item[]) => Item[]) => {
-    const next = mapGroup(docRef.current, gid, fn);
+    let next = mapGroup(docRef.current, gid, fn);
+    // 联动检查：所属大标题的所有小标题是否已全部勾选
+    const ev = findEventByGroup(next, gid);
+    if (ev) {
+      const allItems = eventGroups(ev).flatMap((g) => g.items);
+      if (allItems.length > 0) {
+        const allDone = allItems.every((i) => i.done);
+        if (ev.done !== allDone) {
+          next = mapEvent(next, ev.id, allDone);
+        }
+      }
+    }
     commit(next);
     writer.send('groups/' + gid, { items: findGroup(next, gid)!.items });
   };
   const toggleTask = (eid: string, done: boolean) => {
-    commit(mapEvent(docRef.current, eid, done));
+    // 联动检查：勾选大标题，同步将对应所有小标题都勾上或取消
+    const next = mapEventCascade(docRef.current, eid, done);
+    commit(next);
     writer.send('tasks/' + eid, { done });
   };
   const deleteItem = (gid: string, item: Item) => {
@@ -319,11 +368,27 @@ function EventBlock({
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
 }) {
+  const allItems = useMemo(() => eventGroups(ev).flatMap((g) => g.items), [ev]);
+  const hasItems = allItems.length > 0;
+  const doneCount = useMemo(() => allItems.filter((i) => i.done).length, [allItems]);
+  const isPartial = hasItems && doneCount > 0 && doneCount < allItems.length;
+
   return (
     <div className={'event' + (ev.done ? ' done' : '')}>
       <span className="time">{ev.time}</span>
       <label className="task">
-        <input type="checkbox" id={'task-' + ev.id} checked={ev.done} onChange={(e) => onTask(ev.id, e.target.checked)} />
+        <input
+          type="checkbox"
+          id={'task-' + ev.id}
+          checked={ev.done}
+          ref={(el) => {
+            if (el) el.indeterminate = isPartial;
+          }}
+          onChange={() => {
+            const nextDone = isPartial ? true : !ev.done;
+            onTask(ev.id, nextDone);
+          }}
+        />
         <span className="title">{ev.title}</span>
       </label>
       {ev.note && <p className="note">{ev.note}</p>}
