@@ -21,9 +21,19 @@
 
 ### 快速启动（构建并启动生产服务）
 ```bash
+# 默认：后台 nohup 守护运行，默认乱序高端口 48293
 ./start.sh
-# 或
-npm run serve
+
+# 前台运行（查看实时输出）
+./start.sh -f
+
+# 指定端口后台运行
+./start.sh -p 52381
+
+# 运维命令
+./start.sh status   # 查看运行状态
+./start.sh stop     # 停止后台服务
+./start.sh restart  # 重启后台服务
 ```
 
 ### 分步运行
