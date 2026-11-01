@@ -1370,7 +1370,9 @@ function SettingsModal({
                 </span>
               </div>
               <button type="button" className="sheet-row" onClick={() => setView('colors')} aria-label="重点色">
-                <span className="sheet-dot" style={{ background: currentDot }} />
+                <span className="sheet-icon">
+                  <span className="sheet-dot" style={{ background: currentDot }} />
+                </span>
                 <span>重点色</span>
                 <span className="sheet-value">{currentName}</span>
                 <ChevronRightIcon size={18} className="sheet-chev" />
