@@ -9,16 +9,60 @@ type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
 const OPEN_KEY = 'checklist-open-v1';
 const THEME_KEY = 'checklist-theme-v1';
-/** 重点色主题：accent 进 CSS --red，imgSoft/imgBorder 进导出长图 */
-type ThemeId = 'red' | 'pink' | 'orange' | 'green' | 'blue' | 'purple';
-const THEMES: Record<ThemeId, { name: string; accent: string; soft: string; imgSoft: string; imgBorder: string }> = {
-  red: { name: '红', accent: '#b0262f', soft: '#f8e5e5', imgSoft: '#fbf0ee', imgBorder: '#f2d5d2' },
-  pink: { name: '粉', accent: '#c2255c', soft: '#fdf0f3', imgSoft: '#fdf0f3', imgBorder: '#f3c2d0' },
-  orange: { name: '橙', accent: '#d9480f', soft: '#fff1e6', imgSoft: '#fff1e6', imgBorder: '#f5c9a8' },
-  green: { name: '绿', accent: '#2e7d32', soft: '#eaf6ed', imgSoft: '#eaf6ed', imgBorder: '#c3e8ca' },
-  blue: { name: '蓝', accent: '#1971c2', soft: '#e7f1fa', imgSoft: '#e7f1fa', imgBorder: '#b8d4f0' },
-  purple: { name: '紫', accent: '#7048e8', soft: '#f1eaff', imgSoft: '#f1eaff', imgBorder: '#d0c2f5' },
+/** 重点色预设（顺序与 iOS 日历颜色一致）：accent 进 CSS --red，imgSoft/imgBorder 进导出长图 */
+const THEMES: Record<string, { name: string; accent: string; soft: string; imgSoft: string; imgBorder: string }> = {
+  red: { name: '红色', accent: '#b0262f', soft: '#f8e5e5', imgSoft: '#fbf0ee', imgBorder: '#f2d5d2' },
+  orange: { name: '橙色', accent: '#d9480f', soft: '#fff1e6', imgSoft: '#fff1e6', imgBorder: '#f5c9a8' },
+  yellow: { name: '黄色', accent: '#d9a400', soft: '#fdf6d8', imgSoft: '#fdf6d8', imgBorder: '#e8d488' },
+  green: { name: '绿色', accent: '#2e7d32', soft: '#eaf6ed', imgSoft: '#eaf6ed', imgBorder: '#c3e8ca' },
+  blue: { name: '蓝色', accent: '#1971c2', soft: '#e7f1fa', imgSoft: '#e7f1fa', imgBorder: '#b8d4f0' },
+  purple: { name: '紫色', accent: '#7048e8', soft: '#f1eaff', imgSoft: '#f1eaff', imgBorder: '#d0c2f5' },
+  brown: { name: '褐色', accent: '#8b5e3c', soft: '#f5ebe2', imgSoft: '#f5ebe2', imgBorder: '#d8c0a8' },
 };
+/** hex → rgb */
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(v, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+/** 与白色混合，得到浅色底 / 边框色 */
+function mixWithWhite(hex: string, white: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const m = (c: number) => Math.round(c + (255 - c) * white);
+  return `#${[m(r), m(g), m(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+/** 相对亮度 */
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+/** 主题值（预设 id 或自定义 #rrggbb）→ 实际用色：重点色上的文字取对比度更高的一方 */
+function resolveTheme(value: string): { accent: string; soft: string; on: string; imgSoft: string; imgBorder: string } {
+  const preset = THEMES[value];
+  const accent = preset ? preset.accent : value;
+  const lum = luminance(accent);
+  // 深色字 #2a0b0e 的相对亮度约 0.0076；与白字对比，取对比度更高的一方
+  const on = 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.0576 ? '#ffffff' : '#2a0b0e';
+  if (preset) return { accent: preset.accent, soft: preset.soft, on, imgSoft: preset.imgSoft, imgBorder: preset.imgBorder };
+  return {
+    accent,
+    soft: mixWithWhite(accent, 0.92),
+    on,
+    imgSoft: mixWithWhite(accent, 0.9),
+    imgBorder: mixWithWhite(accent, 0.75),
+  };
+}
+/** 把主题色写进 CSS 变量（内联变量优先于样式表，预设与自定义统一走这里） */
+function setThemeVars(t: { accent: string; soft: string; on: string }) {
+  const root = document.documentElement.style;
+  root.setProperty('--red', t.accent);
+  root.setProperty('--red-soft', t.soft);
+  root.setProperty('--on-red', t.on);
+}
 
 /** 日期键：同步日期用完整日期，手工日期用几号（避免跨月同号冲突） */
 function dayKey(d: { day: number; date?: string }): string {
@@ -210,7 +254,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showImport, setShowImport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [theme, setTheme] = useState<ThemeId>('red');
+  const [theme, setTheme] = useState<string>('red');
 
   // ---------- 单日视图 ----------
   const [selected, setSelected] = useState<string>(() => toDateKey(new Date()));
@@ -376,18 +420,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
   // 主题色：只存在这台设备（不进服务器数据，换设备互不影响）
   useEffect(() => {
     try {
-      const t = localStorage.getItem(THEME_KEY);
-      if (t === 'pink' || t === 'orange' || t === 'green' || t === 'blue' || t === 'purple') {
-        setTheme(t);
-        document.documentElement.setAttribute('data-theme', t);
+      const v = localStorage.getItem(THEME_KEY);
+      if (v && (v in THEMES || /^#[0-9a-fA-F]{6}$/.test(v))) {
+        setTheme(v);
+        setThemeVars(resolveTheme(v));
       }
     } catch {}
   }, []);
-  const applyTheme = (t: ThemeId) => {
-    setTheme(t);
-    document.documentElement.setAttribute('data-theme', t);
+  const applyTheme = (value: string) => {
+    setTheme(value);
+    setThemeVars(resolveTheme(value));
     try {
-      localStorage.setItem(THEME_KEY, t);
+      localStorage.setItem(THEME_KEY, value);
     } catch {}
   };
   const toggleSection = (id: string, value: boolean) => {
@@ -459,6 +503,22 @@ export default function Checklist({ initial }: { initial: Doc }) {
     return { ti, td, ii, id, perDay, perSec, pct: ti + ii ? ((td + id) / (ti + ii)) * 100 : 0 };
   }, [doc]);
 
+  // 进度条与计数只表现当前页：当前这一天的事项 / 明细
+  const dayCounts = useMemo(() => {
+    const d = doc.days.find((x) => x.date === selected);
+    if (!d) return { ti: 0, td: 0, ii: 0, id: 0, pct: 0 };
+    let ti = 0, td = 0, ii = 0, id = 0;
+    for (const ev of d.events) {
+      ti++;
+      if (ev.done) td++;
+      for (const g of eventGroups(ev)) {
+        ii += g.items.length;
+        id += g.items.filter((i) => i.done).length;
+      }
+    }
+    return { ti, td, ii, id, pct: ti + ii ? ((td + id) / (ti + ii)) * 100 : 0 };
+  }, [doc, selected]);
+
   // ---------- 导出长图 ----------
   const [showExport, setShowExport] = useState(false);
   /** 按勾选的日期导出长图；返回是否成功（成功后由调用方关闭选择框） */
@@ -468,7 +528,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
     try {
       const full = docRef.current;
       const filtered: Doc = { ...full, days: full.days.filter((d) => dayKeys.includes(dayKey(d))) };
-      const t = THEMES[theme];
+      const t = resolveTheme(theme);
       const blob = await drawChecklist(filtered, { red: t.accent, soft: t.imgSoft, border: t.imgBorder });
       setPreview(URL.createObjectURL(blob));
       showToast('长图已生成并开启预览', 'success');
@@ -594,12 +654,12 @@ export default function Checklist({ initial }: { initial: Doc }) {
         <div className="bar">
           <div className="prog">
             <div className="track">
-              <div className="fill" style={{ width: counts.pct + '%' }} />
+              <div className="fill" style={{ width: dayCounts.pct + '%' }} />
             </div>
             <div className="prog-row">
               <div className="prog-text">
-                <span>事项 <b>{counts.td}/{counts.ti}</b></span>
-                <span>明细 <b>{counts.id}/{counts.ii}</b></span>
+                <span>事项 <b>{dayCounts.td}/{dayCounts.ti}</b></span>
+                <span>明细 <b>{dayCounts.id}/{dayCounts.ii}</b></span>
               </div>
               <div className="sync" data-s={sync.s} role="status">{sync.text}</div>
             </div>
@@ -1050,45 +1110,90 @@ function SettingsModal({
   onTheme,
   onClose,
 }: {
-  theme: ThemeId;
-  onTheme: (t: ThemeId) => void;
+  theme: string;
+  onTheme: (value: string) => void;
   onClose: () => void;
 }) {
+  // 关闭时先播滑出动画，动画结束后再真正卸载
+  const [closing, setClosing] = useState(false);
+  const close = useCallback(() => setClosing(true), []);
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [close]);
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+  const isCustom = /^#[0-9a-fA-F]{6}$/.test(theme);
   return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="设置">
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2>设置</h2>
-        <p className="sub">选一个重点色，页面整体的色彩风格会跟着变；只保存在这台设备上，导出长图也会用同一个重点色。</p>
-        <div className="theme-grid">
-          {(Object.keys(THEMES) as ThemeId[]).map((id) => {
+    <div
+      className={'sheet-backdrop' + (closing ? ' closing' : '')}
+      onClick={close}
+      role="dialog"
+      aria-modal="true"
+      aria-label="设置"
+    >
+      <div
+        className={'sheet' + (closing ? ' closing' : '')}
+        onClick={(e) => e.stopPropagation()}
+        onAnimationEnd={(e) => {
+          if (closing && e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="sheet-head">
+          <button type="button" className="sheet-close" onClick={close} aria-label="关闭">
+            <CrossIcon size={16} />
+          </button>
+          <div className="sheet-title">设置</div>
+        </div>
+        <div className="sheet-label">重点色</div>
+        <div className="sheet-card">
+          {Object.keys(THEMES).map((id) => {
             const t = THEMES[id];
+            const sel = theme === id;
             return (
-              <button
-                key={id}
-                type="button"
-                className={'theme-swatch' + (theme === id ? ' sel' : '')}
-                onClick={() => onTheme(id)}
-                aria-label={t.name}
-                title={t.name}
-              >
-                <span className="theme-dot" style={{ background: t.accent }} />
+              <button key={id} type="button" className="sheet-row" onClick={() => onTheme(id)} aria-label={t.name}>
+                <span className="sheet-dot" style={{ background: t.accent }}>
+                  {sel && <CheckIcon size={14} />}
+                </span>
                 <span>{t.name}</span>
               </button>
             );
           })}
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn primary" onClick={onClose}>
-            完成
+          <button
+            type="button"
+            className="sheet-row"
+            onClick={() => colorInputRef.current?.click()}
+            aria-label="自定义颜色"
+          >
+            <span
+              className="sheet-dot"
+              style={{ background: isCustom ? theme : 'conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)' }}
+            >
+              {isCustom && <CheckIcon size={14} />}
+            </span>
+            <span>自定义...</span>
           </button>
         </div>
+        <p className="sheet-foot">只保存在这台设备上，导出长图也会用同一个重点色。</p>
+        {/* 原生取色器：iOS 上点开就是系统取色器（网格 / 光谱 / 滑块） */}
+        <input
+          ref={colorInputRef}
+          type="color"
+          value={isCustom ? theme : '#7c5cff'}
+          onChange={(e) => onTheme(e.target.value)}
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+        />
       </div>
     </div>
   );
