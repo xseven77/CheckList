@@ -308,7 +308,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<string>('red');
-  const [onlyToday, setOnlyToday] = useState(false);
+  const [onlyToday, setOnlyToday] = useState(true);
 
   // ---------- 单日视图 ----------
   const [selected, setSelected] = useState<string>(() => toDateKey(new Date()));
@@ -488,10 +488,11 @@ export default function Checklist({ initial }: { initial: Doc }) {
       localStorage.setItem(THEME_KEY, value);
     } catch {}
   };
-  // 仅今天可勾选：只存在这台设备（不进服务器数据，换设备互不影响）
+  // 仅今天可勾选：只存在这台设备（不进服务器数据，换设备互不影响）；默认开启，没存过偏好就按开算
   useEffect(() => {
     try {
-      setOnlyToday(localStorage.getItem(ONLY_TODAY_KEY) === '1');
+      const v = localStorage.getItem(ONLY_TODAY_KEY);
+      if (v !== null) setOnlyToday(v === '1');
     } catch {}
   }, []);
   const applyOnlyToday = (value: boolean) => {

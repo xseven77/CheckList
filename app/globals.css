@@ -354,8 +354,9 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   border: 2px solid var(--gold);
   background: var(--surface);
   cursor: pointer;
-  display: inline-grid;
-  place-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
   vertical-align: middle;
 }
@@ -373,7 +374,7 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   height: 5px;
   border-left: 2px solid #fff;
   border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translate(0.5px, -0.5px);
+  transform: rotate(-45deg);
 }
 .task-checkbox:indeterminate {
   background: var(--surface);
@@ -399,8 +400,9 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   border: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent);
   background: var(--surface);
   cursor: pointer;
-  display: inline-grid;
-  place-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
   vertical-align: middle;
 }
@@ -418,7 +420,7 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   height: 4.5px;
   border-left: 2px solid #fff;
   border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translate(0.5px, -0.5px);
+  transform: rotate(-45deg);
 }
 
 .sec { margin-top: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
