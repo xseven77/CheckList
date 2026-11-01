@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Day, type Event, type Group, type Item, type Section, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
-import { AlertIcon, CheckIcon, ChevronLeftIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
+import { AlertIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
@@ -41,17 +41,21 @@ function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 /** 主题值（预设 id 或自定义 #rrggbb）→ 实际用色：重点色上的文字取对比度更高的一方 */
-function resolveTheme(value: string): { accent: string; soft: string; on: string; imgSoft: string; imgBorder: string } {
+function resolveTheme(value: string): { accent: string; soft: string; on: string; bg: string; line: string; imgSoft: string; imgBorder: string } {
   const preset = THEMES[value];
   const accent = preset ? preset.accent : value;
   const lum = luminance(accent);
   // 深色字 #2a0b0e 的相对亮度约 0.0076；与白字对比，取对比度更高的一方
   const on = 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.0576 ? '#ffffff' : '#2a0b0e';
-  if (preset) return { accent: preset.accent, soft: preset.soft, on, imgSoft: preset.imgSoft, imgBorder: preset.imgBorder };
+  const bg = mixWithWhite(accent, 0.965);
+  const line = mixWithWhite(accent, 0.85);
+  if (preset) return { accent: preset.accent, soft: preset.soft, on, bg, line, imgSoft: preset.imgSoft, imgBorder: preset.imgBorder };
   return {
     accent,
     soft: mixWithWhite(accent, 0.92),
     on,
+    bg,
+    line,
     imgSoft: mixWithWhite(accent, 0.9),
     imgBorder: mixWithWhite(accent, 0.75),
   };
@@ -98,11 +102,19 @@ function defaultExportTitle(dayKeys: string[]): string {
   return `${fmt(dates[0])}—${fmt(dates[dates.length - 1])}`;
 }
 /** 把主题色写进 CSS 变量（内联变量优先于样式表，预设与自定义统一走这里） */
-function setThemeVars(t: { accent: string; soft: string; on: string }) {
+function setThemeVars(t: { accent: string; soft: string; on: string; bg: string; line: string }) {
   const root = document.documentElement.style;
   root.setProperty('--red', t.accent);
   root.setProperty('--red-soft', t.soft);
   root.setProperty('--on-red', t.on);
+  // 背景与边框只在浅色模式下跟随主题；深色模式下撤掉内联值、交还给深色默认值，避免浅底刺眼
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    root.removeProperty('--bg');
+    root.removeProperty('--line');
+  } else {
+    root.setProperty('--bg', t.bg);
+    root.setProperty('--line', t.line);
+  }
 }
 
 /** 日期键：同步日期用完整日期，手工日期用几号（避免跨月同号冲突） */
@@ -475,6 +487,13 @@ export default function Checklist({ initial }: { initial: Doc }) {
       localStorage.setItem(THEME_KEY, value);
     } catch {}
   };
+  // 系统深浅模式切换时，背景与边框要重新按当前主题取舍（浅色跟随、深色交还默认值）
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setThemeVars(resolveTheme(theme));
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [theme]);
   const toggleSection = (id: string, value: boolean) => {
     setOpen((o) => {
       const next = { ...o, [id]: value };
@@ -1172,8 +1191,8 @@ function SettingsModal({
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
   const close = useCallback(() => setClosing(true), []);
-  // 自定义取色器是内置的第二页（点“自定义...”进，左上角返回）
-  const [view, setView] = useState<'list' | 'custom'>('list');
+  // 设置页分层（参考 Muse 设置页）：主页选项 → 重点色列表 → 自定义取色板
+  const [view, setView] = useState<'main' | 'colors' | 'custom'>('main');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -1190,6 +1209,8 @@ function SettingsModal({
   }, []);
   const isCustom = /^#[0-9a-fA-F]{6}$/.test(theme);
   const customHex = isCustom ? theme : '#7c5cff';
+  const currentName = isCustom ? '自定义' : (THEMES[theme]?.name ?? '红色');
+  const currentDot = isCustom ? theme : (THEMES[theme]?.accent ?? '#b0262f');
   return (
     <div
       className={'sheet-backdrop' + (closing ? ' closing' : '')}
@@ -1205,21 +1226,33 @@ function SettingsModal({
           if (closing && e.target === e.currentTarget) onClose();
         }}
       >
-        <div className="sheet-head">
-          {view === 'custom' ? (
-            <button type="button" className="sheet-back" onClick={() => setView('list')} aria-label="返回">
-              <ChevronLeftIcon size={20} />
-            </button>
-          ) : (
-            <button type="button" className="sheet-close" onClick={close} aria-label="关闭">
-              <CrossIcon size={16} />
-            </button>
-          )}
-          <div className="sheet-title">{view === 'custom' ? '颜色' : '设置'}</div>
-        </div>
-        {view === 'list' ? (
+        {view === 'main' && (
           <>
-            <div className="sheet-label">重点色</div>
+            <div className="sheet-head">
+              <div className="sheet-title">设置</div>
+              <button type="button" className="sheet-close" onClick={close} aria-label="关闭">
+                <CrossIcon size={16} />
+              </button>
+            </div>
+            <div className="sheet-card">
+              <button type="button" className="sheet-row" onClick={() => setView('colors')} aria-label="重点色">
+                <span className="sheet-dot" style={{ background: currentDot }} />
+                <span>重点色</span>
+                <span className="sheet-value">{currentName}</span>
+                <ChevronRightIcon size={18} className="sheet-chev" />
+              </button>
+            </div>
+            <p className="sheet-foot">只保存在这台设备上，导出长图也会用同一个重点色。</p>
+          </>
+        )}
+        {view === 'colors' && (
+          <>
+            <div className="sheet-head">
+              <button type="button" className="sheet-back" onClick={() => setView('main')} aria-label="返回">
+                <ChevronLeftIcon size={20} />
+              </button>
+              <div className="sheet-title">重点色</div>
+            </div>
             <div className="sheet-card">
               {Object.keys(THEMES).map((id) => {
                 const t = THEMES[id];
@@ -1227,7 +1260,7 @@ function SettingsModal({
                 return (
                   <button key={id} type="button" className="sheet-row" onClick={() => onTheme(id)} aria-label={t.name}>
                     <span className="sheet-dot" style={{ background: t.accent }}>
-                      {sel && <CheckIcon size={12} />}
+                      {sel && <CheckIcon size={10} />}
                     </span>
                     <span>{t.name}</span>
                   </button>
@@ -1238,15 +1271,23 @@ function SettingsModal({
                   className="sheet-dot"
                   style={{ background: isCustom ? theme : 'conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)' }}
                 >
-                  {isCustom && <CheckIcon size={12} />}
+                  {isCustom && <CheckIcon size={10} />}
                 </span>
                 <span>自定义...</span>
+                <ChevronRightIcon size={18} className="sheet-chev" />
               </button>
             </div>
-            <p className="sheet-foot">只保存在这台设备上，导出长图也会用同一个重点色。</p>
+            <p className="sheet-foot">点一个颜色立即应用；自定义颜色在下一层选。</p>
           </>
-        ) : (
+        )}
+        {view === 'custom' && (
           <>
+            <div className="sheet-head">
+              <button type="button" className="sheet-back" onClick={() => setView('colors')} aria-label="返回">
+                <ChevronLeftIcon size={20} />
+              </button>
+              <div className="sheet-title">颜色</div>
+            </div>
             <div className="picker-preview">
               <span className="picker-swatch" style={{ background: customHex }} />
               <span className="picker-hex">{customHex.toUpperCase()}</span>
@@ -1275,3 +1316,4 @@ function SettingsModal({
     </div>
   );
 }
+

@@ -846,19 +846,20 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 /* 设置 popup：底部滑出的 sheet，带进出动画 */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .4); animation: fade-in .25s ease; }
 .sheet-backdrop.closing { animation: fade-out .25s ease forwards; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-height: 92vh; overflow-y: auto; background: var(--bg); border-radius: 24px 24px 0 0; padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px)); animation: sheet-up .35s cubic-bezier(.32,.72,0,1); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-height: 92vh; overflow-y: auto; background: var(--bg); border-radius: 28px 28px 0 0; padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px)); animation: sheet-up .35s cubic-bezier(.32,.72,0,1); }
 .sheet.closing { animation: sheet-down .28s ease forwards; }
 @keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
-.sheet-head { display: flex; align-items: center; justify-content: center; position: relative; padding: 8px 0 12px; }
-.sheet-close, .sheet-back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-content: center; color: var(--ink); cursor: pointer; }
-.sheet-title { font: 700 18px/1.3 var(--display); color: var(--ink); }
-.sheet-label { font-size: 13px; color: var(--muted); margin: 12px 4px 8px; }
-.sheet-card { background: var(--surface); border-radius: 16px; overflow: hidden; }
-.sheet-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 16px; color: var(--ink); text-align: left; cursor: pointer; }
+.sheet-head { display: flex; align-items: center; gap: 12px; padding: 16px 0 20px; }
+.sheet-close, .sheet-back { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-content: center; color: var(--ink); cursor: pointer; flex: none; }
+.sheet-title { flex: 1; font: 700 30px/1.2 var(--display); color: var(--ink); }
+.sheet-card { background: var(--surface); border-radius: 24px; overflow: hidden; }
+.sheet-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }
+.sheet-value { margin-left: auto; color: var(--muted); font-size: 16px; flex: none; }
+.sheet-chev { color: var(--muted); flex: none; }
 .sheet-row:last-child { border-bottom: none; }
-.sheet-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-content: center; color: #fff; flex: none; }
+.sheet-dot { width: 16px; height: 16px; border-radius: 50%; display: grid; place-content: center; color: #fff; flex: none; }
 /* 自定义取色板 */
 .picker-preview { display: flex; align-items: center; gap: 12px; margin: 12px 0 16px; }
 .picker-swatch { width: 56px; height: 56px; border-radius: 16px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
@@ -866,4 +867,4 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 .picker-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; }
 .picker-cell { aspect-ratio: 1; border: none; border-radius: 8px; display: grid; place-content: center; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .picker-cell.sel { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px rgba(0,0,0,.3); }
-.sheet-foot { font-size: 12.5px; color: var(--muted); margin: 10px 4px 0; }
+.sheet-foot { font-size: 12.5px; color: var(--muted); margin: 12px 4px 0; }
