@@ -36,6 +36,20 @@ store.bus.setMaxListeners(0);
 
 export class NotFoundError extends Error {}
 
+/**
+ * 迁移：丢弃无日期的旧天。
+ * 老 seed 里写死的天（第3天、第4天……）没有 date 字段；现在的清单只认带日期的天，
+ * 且应用已不再提供新建无日期天的入口，所以这类天只可能是历史残留，加载时直接丢弃并写回。
+ * 这样无论 state.json 从哪来（老部署、备份恢复），旧数据都不会再冒出来。
+ */
+function dropDatelessDays(doc: Checklist): boolean {
+  const days = Array.isArray(doc.days) ? doc.days : [];
+  const kept = days.filter((d) => d && d.date);
+  if (kept.length === days.length) return false;
+  doc.days = kept;
+  return true;
+}
+
 export async function readState(): Promise<Checklist> {
   let stat;
   try {
@@ -43,12 +57,19 @@ export async function readState(): Promise<Checklist> {
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
     const seed = JSON.parse(await fs.readFile(/*turbopackIgnore: true*/ SEED_FILE, 'utf8')) as Checklist;
+    dropDatelessDays(seed);
     await writeState(seed);
     return seed;
   }
   // 文件被手动改过（mtime 变了）就重新读
   if (!store.doc || stat.mtimeMs !== store.mtimeMs) {
-    store.doc = JSON.parse(await fs.readFile(STATE_FILE, 'utf8')) as Checklist;
+    const raw = JSON.parse(await fs.readFile(STATE_FILE, 'utf8')) as Checklist;
+    if (dropDatelessDays(raw)) {
+      // 迁移写回：下次加载就是干净的；写回走原子替换，与正常写入同一路径
+      await writeState(raw);
+      return raw;
+    }
+    store.doc = raw;
     store.mtimeMs = stat.mtimeMs;
   }
   return store.doc;
@@ -129,7 +150,7 @@ export type CalendarImportSummary = {
  * 日历导入（单向）：解析得到的日历事件合并进清单。
  * - 按 calUid 匹配已有事项：只更新时间/标题/备注/地点，done 与明细原样保留；
  * - 日期变了则把事项搬到对应日期下（空了的同步日期随之删除）；
- * - 未匹配的建新事项；手工日期（无 date）永不被同步触碰。
+ * - 未匹配的建新事项；无 date 的旧天在 readState 加载时已丢弃，同步只处理带日期的天。
  * 提交走一次 doc 变更，SSE 会把整份新文档推给所有在线设备。
  */
 export function importCalendarEvents(
@@ -228,13 +249,13 @@ export function importCalendarEvents(
         summary.deleted += removed;
       }
     }
-    // 删空了的同步日期随之删除（手工日期不动）
-    doc.days = doc.days.filter((d) => !d.date || d.events.length > 0);
+    // 删空了的日期随之删除；无日期的旧天在 readState 加载时已丢弃，到这里只剩带日期的天
+    doc.days = doc.days
+      .filter((d) => d.date && d.events.length > 0)
+      .sort((a, b) => (a.date as string) < (b.date as string) ? -1 : 1);
 
-    // 手工日期在前保持原顺序，同步日期按 date 排；同步日期内事项按时间排（全天在前）
-    const legacy = doc.days.filter((d) => !d.date);
-    const dated = doc.days.filter((d) => d.date).sort((a, b) => (a.date as string) < (b.date as string) ? -1 : 1);
-    for (const d of dated) {
+    // 同步日期内事项按时间排（全天在前）
+    for (const d of doc.days) {
       d.events.sort((a, b) => {
         const ta = a.time === '全天' ? '' : a.time;
         const tb = b.time === '全天' ? '' : b.time;
@@ -242,7 +263,6 @@ export function importCalendarEvents(
         return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
       });
     }
-    doc.days = [...legacy, ...dated];
 
     const change = await commit(doc, { type: 'doc', doc });
     return { summary, rev: change.rev };

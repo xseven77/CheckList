@@ -20,7 +20,7 @@ export type Event = {
 
 export type Day = {
   day: number;
-  /** 完整日期 yyyy-MM-dd；日历同步生成的日期带此字段，手工日期可为空 */
+  /** 完整日期 yyyy-MM-dd；无 date 的旧天在加载时会被丢弃（见 readState 迁移） */
   date?: string;
   events: Event[];
 };
