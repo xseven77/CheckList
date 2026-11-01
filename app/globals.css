@@ -118,7 +118,7 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
 .time-editor .field { width: auto; max-width: 160px; min-height: 32px; padding: 0 8px; font-size: 13px; }
 
 .task-wrap { display: flex; align-items: center; gap: 8px; }
-.task { flex: 1; min-width: 0; display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
+.task { flex: 1; min-width: 0; display: flex; gap: 12px; align-items: center; min-height: 44px; }
 .task .title { font-size: 17px; font-weight: 700; line-height: 1.4; color: var(--ink); }
 .event.done .title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--red); }
 .task-editor { flex: 1; display: flex; align-items: center; gap: 6px; }
@@ -440,8 +440,8 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
 .items { display: grid; }
 .item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 44px; }
 .item label { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.item .t { overflow-wrap: anywhere; }
-.item input:checked + .t { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--red); }
+.item .t { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.item.done .t { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--red); }
 .item .ops { display: flex; gap: 4px; }
 .item .editor { flex: 1 1 160px; min-width: 0; }
 
@@ -840,6 +840,20 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 .sheet-head { display: flex; align-items: center; gap: 12px; padding: 16px 0 20px; }
 .sheet-close, .sheet-back { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-content: center; color: var(--ink); cursor: pointer; flex: none; }
+/* 防误触勾选框：视觉框保持 18/22px，但触点扩到 44px；文字不再是热区 */
+.check-hit { flex: none; width: 44px; height: 44px; display: inline-grid; place-content: center; margin-left: -13px; }
+.task .check-hit { margin-right: -9px; }
+.item .check-hit { margin-right: -7px; }
+.task-checkbox:disabled, .item-checkbox:disabled { opacity: .35; cursor: default; }
+.task-checkbox:disabled:hover { border-color: var(--gold); box-shadow: none; }
+.item-checkbox:disabled:hover { border-color: color-mix(in srgb, var(--ink) 25%, transparent); box-shadow: none; }
+
+/* 设置里的开关：iOS 风格，打开时用重点色 */
+.sheet-switch { margin-left: auto; flex: none; width: 52px; height: 32px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 18%, transparent); position: relative; transition: background .2s ease; }
+.sheet-switch .sheet-knob { position: absolute; top: 2px; left: 2px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: left .2s ease; }
+.sheet-switch.on { background: var(--red); }
+.sheet-switch.on .sheet-knob { left: 22px; }
+
 .sheet-title { flex: 1; font: 800 28px/1.2 var(--display); color: var(--ink); }
 .sheet-card { background: var(--surface); border-radius: 24px; overflow: hidden; }
 .sheet-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }

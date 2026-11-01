@@ -9,6 +9,7 @@ type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
 const OPEN_KEY = 'checklist-open-v1';
 const THEME_KEY = 'checklist-theme-v1';
+const ONLY_TODAY_KEY = 'checklist-only-today-v1';
 /** 重点色预设（顺序与 iOS 日历颜色一致）：accent 进 CSS --red，imgSoft/imgBorder 进导出长图 */
 const THEMES: Record<string, { name: string; accent: string; soft: string; imgSoft: string; imgBorder: string }> = {
   red: { name: '红色', accent: '#b0262f', soft: '#f8e5e5', imgSoft: '#fbf0ee', imgBorder: '#f2d5d2' },
@@ -307,6 +308,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<string>('red');
+  const [onlyToday, setOnlyToday] = useState(false);
 
   // ---------- 单日视图 ----------
   const [selected, setSelected] = useState<string>(() => toDateKey(new Date()));
@@ -486,6 +488,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
       localStorage.setItem(THEME_KEY, value);
     } catch {}
   };
+  // 仅今天可勾选：只存在这台设备（不进服务器数据，换设备互不影响）
+  useEffect(() => {
+    try {
+      setOnlyToday(localStorage.getItem(ONLY_TODAY_KEY) === '1');
+    } catch {}
+  }, []);
+  const applyOnlyToday = (value: boolean) => {
+    setOnlyToday(value);
+    try {
+      localStorage.setItem(ONLY_TODAY_KEY, value ? '1' : '0');
+    } catch {}
+  };
   // 系统深浅模式切换时，背景与边框要重新按当前主题取舍（浅色跟随、深色交还默认值）
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -641,6 +655,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
               open={open}
               onSection={toggleSection}
               perSec={counts.perSec}
+              checkDisabled={onlyToday && key !== todayKey}
             />
           ))}
         </div>
@@ -779,6 +794,8 @@ export default function Checklist({ initial }: { initial: Doc }) {
           onExport={doExport}
           onImported={refetch}
           showToast={showToast}
+          onlyToday={onlyToday}
+          onOnlyToday={applyOnlyToday}
         />
       )}
 
@@ -811,6 +828,7 @@ function EventBlock({
   open,
   onSection,
   perSec,
+  checkDisabled,
 }: {
   ev: Event;
   onTask: (eid: string, done: boolean) => void;
@@ -818,6 +836,7 @@ function EventBlock({
   open: Record<string, boolean>;
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
+  checkDisabled: boolean;
 }) {
   const allItems = useMemo(() => eventGroups(ev).flatMap((g) => g.items), [ev]);
   const hasItems = allItems.length > 0;
@@ -831,22 +850,17 @@ function EventBlock({
       </div>
 
       <div className="task-wrap">
-        <label className="task">
-          <input
-            type="checkbox"
-            className="task-checkbox"
+        <div className="task">
+          <CheckBox
             id={'task-' + ev.id}
+            className="task-checkbox"
             checked={ev.done}
-            ref={(el) => {
-              if (el) el.indeterminate = isPartial;
-            }}
-            onChange={() => {
-              const nextDone = isPartial ? true : !ev.done;
-              onTask(ev.id, nextDone);
-            }}
+            indeterminate={isPartial}
+            disabled={checkDisabled}
+            onToggle={(nextDone) => onTask(ev.id, nextDone)}
           />
           <span className="title">{ev.title}</span>
-        </label>
+        </div>
       </div>
 
       {ev.location && <p className="note">📍 {ev.location}</p>}
@@ -855,7 +869,7 @@ function EventBlock({
       {ev.groups.length > 0 && (
         <div className="direct">
           {ev.groups.map((g) => (
-            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} />
+            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} />
           ))}
         </div>
       )}
@@ -868,6 +882,7 @@ function EventBlock({
           open={open[s.id] !== false}
           onToggle={(v) => onSection(s.id, v)}
           onToggleItem={onToggleItem}
+          checkDisabled={checkDisabled}
         />
       ))}
     </div>
@@ -880,12 +895,14 @@ function SectionBlock({
   open,
   onToggle,
   onToggleItem,
+  checkDisabled,
 }: {
   s: Section;
   counts: [number, number];
   open: boolean;
   onToggle: (open: boolean) => void;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
+  checkDisabled: boolean;
 }) {
   const [a, b] = counts;
 
@@ -906,7 +923,7 @@ function SectionBlock({
 
       <div className="sec-body">
         {s.groups.map((g) => (
-          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} />
+          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} />
         ))}
       </div>
     </details>
@@ -916,9 +933,11 @@ function SectionBlock({
 function GroupBlock({
   group,
   onToggleItem,
+  checkDisabled,
 }: {
   group: Group;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
+  checkDisabled: boolean;
 }) {
   if (!group.items.length) return null;
 
@@ -936,6 +955,7 @@ function GroupBlock({
             key={item.id}
             item={item}
             onToggle={(done) => onToggleItem(group.id, item.id, done)}
+            checkDisabled={checkDisabled}
           />
         ))}
       </div>
@@ -943,25 +963,81 @@ function GroupBlock({
   );
 }
 
+/**
+ * 防误触勾选框：只有点在框上才切换，文字不再是热区；手指滑动（滚动、左右换天）后松手冒出来的点击会被忽略。
+ * 不做二次确认：点对了就是一次生效，点错了靠“没滑就没事”来防。
+ */
+function CheckBox({
+  id,
+  checked,
+  indeterminate,
+  disabled,
+  onToggle,
+  className,
+}: {
+  id: string;
+  checked: boolean;
+  indeterminate?: boolean;
+  disabled?: boolean;
+  onToggle: (next: boolean) => void;
+  className: string;
+}) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
+  return (
+    <span
+      className="check-hit"
+      onPointerDown={(e) => {
+        start.current = { x: e.clientX, y: e.clientY };
+        moved.current = false;
+      }}
+      onPointerMove={(e) => {
+        const s = start.current;
+        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) moved.current = true;
+      }}
+      onClick={(e) => {
+        if (disabled) return;
+        if (moved.current) {
+          e.preventDefault();
+          return;
+        }
+        onToggle(!checked);
+      }}
+    >
+      <input
+        type="checkbox"
+        className={className}
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        readOnly
+        ref={(el) => {
+          if (el) el.indeterminate = !!indeterminate;
+        }}
+      />
+    </span>
+  );
+}
+
 function ItemRow({
   item,
   onToggle,
+  checkDisabled,
 }: {
   item: Item;
   onToggle: (done: boolean) => void;
+  checkDisabled: boolean;
 }) {
   return (
-    <div className="item">
-      <label>
-        <input
-          type="checkbox"
-          className="item-checkbox"
-          id={'cb-' + item.id}
-          checked={item.done}
-          onChange={(e) => onToggle(e.target.checked)}
-        />
-        <span className="t">{item.text}</span>
-      </label>
+    <div className={'item' + (item.done ? ' done' : '')}>
+      <CheckBox
+        id={'cb-' + item.id}
+        className="item-checkbox"
+        checked={item.done}
+        disabled={checkDisabled}
+        onToggle={(done) => onToggle(done)}
+      />
+      <span className="t">{item.text}</span>
     </div>
   );
 }
@@ -1009,6 +1085,8 @@ function SettingsModal({
   onExport,
   onImported,
   showToast,
+  onlyToday,
+  onOnlyToday,
 }: {
   theme: string;
   onTheme: (value: string) => void;
@@ -1019,6 +1097,8 @@ function SettingsModal({
   onExport: (keys: string[], title: string) => Promise<boolean>;
   onImported: () => Promise<void>;
   showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err') => void;
+  onlyToday: boolean;
+  onOnlyToday: (value: boolean) => void;
 }) {
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
@@ -1207,6 +1287,24 @@ function SettingsModal({
                 <span>重点色</span>
                 <span className="sheet-value">{currentName}</span>
                 <ChevronRightIcon size={18} className="sheet-chev" />
+              </button>
+            </div>
+            <div className="sheet-card">
+              <button
+                type="button"
+                className="sheet-row"
+                role="switch"
+                aria-checked={onlyToday}
+                aria-label="仅今天可勾选"
+                onClick={() => onOnlyToday(!onlyToday)}
+              >
+                <span className="sheet-icon">
+                  <CheckIcon size={20} />
+                </span>
+                <span>仅今天可勾选</span>
+                <span className={'sheet-switch' + (onlyToday ? ' on' : '')} aria-hidden="true">
+                  <span className="sheet-knob" />
+                </span>
               </button>
             </div>
             <div className="sheet-card">
