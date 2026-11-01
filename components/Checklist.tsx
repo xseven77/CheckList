@@ -1344,6 +1344,9 @@ function SettingsModal({
             <div className="sheet-section">外观</div>
             <div className="sheet-card">
               <div className="sheet-row static" aria-label="主题">
+                <span className="sheet-icon">
+                  {mode === 'dark' ? <MoonIcon size={20} /> : mode === 'light' ? <SunIcon size={20} /> : <MonitorIcon size={20} />}
+                </span>
                 <span>主题</span>
                 <span className="mode-seg" role="radiogroup" aria-label="主题">
                   {([
