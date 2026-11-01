@@ -657,6 +657,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
               onSection={toggleSection}
               perSec={counts.perSec}
               checkDisabled={onlyToday && key !== todayKey}
+              onDisabledTap={() => showToast('仅今天可以勾选', 'info')}
             />
           ))}
         </div>
@@ -830,6 +831,7 @@ function EventBlock({
   onSection,
   perSec,
   checkDisabled,
+  onDisabledTap,
 }: {
   ev: Event;
   onTask: (eid: string, done: boolean) => void;
@@ -838,6 +840,7 @@ function EventBlock({
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
   checkDisabled: boolean;
+  onDisabledTap: () => void;
 }) {
   const allItems = useMemo(() => eventGroups(ev).flatMap((g) => g.items), [ev]);
   const hasItems = allItems.length > 0;
@@ -859,6 +862,7 @@ function EventBlock({
             indeterminate={isPartial}
             disabled={checkDisabled}
             onToggle={(nextDone) => onTask(ev.id, nextDone)}
+            onDisabledTap={onDisabledTap}
           />
           <span className="title">{ev.title}</span>
         </div>
@@ -870,7 +874,7 @@ function EventBlock({
       {ev.groups.length > 0 && (
         <div className="direct">
           {ev.groups.map((g) => (
-            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} />
+            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} onDisabledTap={onDisabledTap} />
           ))}
         </div>
       )}
@@ -884,6 +888,7 @@ function EventBlock({
           onToggle={(v) => onSection(s.id, v)}
           onToggleItem={onToggleItem}
           checkDisabled={checkDisabled}
+          onDisabledTap={onDisabledTap}
         />
       ))}
     </div>
@@ -897,6 +902,7 @@ function SectionBlock({
   onToggle,
   onToggleItem,
   checkDisabled,
+  onDisabledTap,
 }: {
   s: Section;
   counts: [number, number];
@@ -904,6 +910,7 @@ function SectionBlock({
   onToggle: (open: boolean) => void;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
   checkDisabled: boolean;
+  onDisabledTap: () => void;
 }) {
   const [a, b] = counts;
 
@@ -924,7 +931,7 @@ function SectionBlock({
 
       <div className="sec-body">
         {s.groups.map((g) => (
-          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} />
+          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} onDisabledTap={onDisabledTap} />
         ))}
       </div>
     </details>
@@ -935,10 +942,12 @@ function GroupBlock({
   group,
   onToggleItem,
   checkDisabled,
+  onDisabledTap,
 }: {
   group: Group;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
   checkDisabled: boolean;
+  onDisabledTap: () => void;
 }) {
   if (!group.items.length) return null;
 
@@ -957,6 +966,7 @@ function GroupBlock({
             item={item}
             onToggle={(done) => onToggleItem(group.id, item.id, done)}
             checkDisabled={checkDisabled}
+            onDisabledTap={onDisabledTap}
           />
         ))}
       </div>
@@ -975,6 +985,7 @@ function CheckBox({
   disabled,
   onToggle,
   className,
+  onDisabledTap,
 }: {
   id: string;
   checked: boolean;
@@ -982,6 +993,7 @@ function CheckBox({
   disabled?: boolean;
   onToggle: (next: boolean) => void;
   className: string;
+  onDisabledTap?: () => void;
 }) {
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
@@ -997,9 +1009,12 @@ function CheckBox({
         if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 12) moved.current = true;
       }}
       onClick={(e) => {
-        if (disabled) return;
         if (moved.current) {
           e.preventDefault();
+          return;
+        }
+        if (disabled) {
+          onDisabledTap?.();
           return;
         }
         onToggle(!checked);
@@ -1024,10 +1039,12 @@ function ItemRow({
   item,
   onToggle,
   checkDisabled,
+  onDisabledTap,
 }: {
   item: Item;
   onToggle: (done: boolean) => void;
   checkDisabled: boolean;
+  onDisabledTap: () => void;
 }) {
   return (
     <div className={'item' + (item.done ? ' done' : '')}>
@@ -1037,6 +1054,7 @@ function ItemRow({
         checked={item.done}
         disabled={checkDisabled}
         onToggle={(done) => onToggle(done)}
+        onDisabledTap={onDisabledTap}
       />
       <span className="t">{item.text}</span>
     </div>
