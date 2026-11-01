@@ -802,7 +802,7 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
 .wday.sel .wnum-wrap { background: var(--red); }
 .wday.sel .wnum { color: var(--on-red); }
 .wday.sel .wlun { color: var(--on-red); opacity: .85; }
-.day-head { text-align: center; padding-block: 18px 6px; }
+.day-head { text-align: center; padding-block: 8px 6px; }
 .day-title { font-size: 20px; font-weight: 700; }
 .day-lunar { color: var(--muted); font-size: 15px; margin-top: 2px; }
 .bar { position: static; }
