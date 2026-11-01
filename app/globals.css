@@ -22,12 +22,21 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  /* JS 接管前（data-mode 未设置）跟随系统，避免深色用户闪一下浅色；JS 设置 data-mode 后由下面的 [data-mode="dark"] 接管 */
+  :root:not([data-mode]) {
     --bg: #161112; --surface: #201a1b; --ink: #f3eaea; --muted: #a8999a; --line: #3a2e30;
     --red: #ec6a70; --on-red: #2a0b0e; --red-soft: #3a1d20; --gold: #d8ab5a; --ok: #5cc188; --err: #ec6a70;
     --toast-bg: #f3eaea; --toast-fg: #161112;
     color-scheme: dark;
   }
+}
+
+/* 强制深色：与上面媒体查询里的深色变量保持一致，改一处要同步改另一处 */
+[data-mode="dark"] {
+  --bg: #161112; --surface: #201a1b; --ink: #f3eaea; --muted: #a8999a; --line: #3a2e30;
+  --red: #ec6a70; --on-red: #2a0b0e; --red-soft: #3a1d20; --gold: #d8ab5a; --ok: #5cc188; --err: #ec6a70;
+  --toast-bg: #f3eaea; --toast-fg: #161112;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -880,6 +889,13 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 .sheet-danger { width: 100%; margin-top: 16px; padding: 12px; border: none; background: none; color: var(--err); font-size: 16px; cursor: pointer; }
 
 .sheet-card + .sheet-card { margin-top: 16px; }
+.sheet-section { font-size: 13px; color: var(--muted); margin: 0 4px 8px; }
+.sheet-card + .sheet-section { margin-top: 20px; }
+.sheet-row.static { cursor: default; }
+/* 主题三段切换：浅色 / 深色 / 跟随系统，选中段用底面色 + 阴影 */
+.mode-seg { margin-left: auto; flex: none; display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.mode-seg-btn { width: 36px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+.mode-seg-btn.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .2); }
 .sheet-icon { width: 24px; height: 24px; display: grid; place-content: center; color: var(--ink); flex: none; }
 .sheet-field { margin-bottom: 16px; }
 .sheet-field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }

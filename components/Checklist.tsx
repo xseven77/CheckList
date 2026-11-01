@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Day, type Event, type Group, type Item, type Section, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
-import { AlertIcon, CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
+import { AlertIcon, CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon, GearIcon, InfoIcon, MonitorIcon, MoonIcon, ShareIcon, SunIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
 const OPEN_KEY = 'checklist-open-v1';
 const THEME_KEY = 'checklist-theme-v1';
 const ONLY_TODAY_KEY = 'checklist-only-today-v1';
+/** 主题模式：浅色 / 深色 / 跟随系统（默认跟随系统，和原来一样） */
+type Mode = 'light' | 'dark' | 'system';
+const MODE_KEY = 'checklist-mode-v1';
 /** 重点色预设（顺序与 iOS 日历颜色一致）：accent 进 CSS --red，imgSoft/imgBorder 进导出长图 */
 const THEMES: Record<string, { name: string; accent: string; soft: string; imgSoft: string; imgBorder: string }> = {
   red: { name: '红色', accent: '#b0262f', soft: '#f8e5e5', imgSoft: '#fbf0ee', imgBorder: '#f2d5d2' },
@@ -103,19 +106,33 @@ function defaultExportTitle(dayKeys: string[]): string {
   return `${fmt(dates[0])}—${fmt(dates[dates.length - 1])}`;
 }
 /** 把主题色写进 CSS 变量（内联变量优先于样式表，预设与自定义统一走这里） */
-function setThemeVars(t: { accent: string; soft: string; on: string; bg: string; line: string }) {
+function setThemeVars(t: { accent: string; soft: string; on: string; bg: string; line: string }, isDark: boolean) {
   const root = document.documentElement.style;
   root.setProperty('--red', t.accent);
   root.setProperty('--red-soft', t.soft);
   root.setProperty('--on-red', t.on);
   // 背景与边框只在浅色模式下跟随主题；深色模式下撤掉内联值、交还给深色默认值，避免浅底刺眼
-  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  if (isDark) {
     root.removeProperty('--bg');
     root.removeProperty('--line');
   } else {
     root.setProperty('--bg', t.bg);
     root.setProperty('--line', t.line);
   }
+}
+
+/** 解析实际深浅：强制浅色/深色直接定，跟随系统看系统 */
+function resolveDark(m: Mode): boolean {
+  if (m === 'dark') return true;
+  if (m === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** 应用外观：data-mode 管底色深浅变量，主题色管重点色；只存在这台设备 */
+function applyAppearance(m: Mode, themeValue: string) {
+  const dark = resolveDark(m);
+  document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+  setThemeVars(resolveTheme(themeValue), dark);
 }
 
 /** 日期键：同步日期用完整日期，手工日期用几号（避免跨月同号冲突） */
@@ -308,6 +325,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<string>('red');
+  const [mode, setMode] = useState<Mode>('system');
   const [onlyToday, setOnlyToday] = useState(true);
 
   // ---------- 单日视图 ----------
@@ -471,21 +489,30 @@ export default function Checklist({ initial }: { initial: Doc }) {
       setOpen(JSON.parse(localStorage.getItem(OPEN_KEY) || '{}'));
     } catch {}
   }, []);
-  // 主题色：只存在这台设备（不进服务器数据，换设备互不影响）
+  // 外观（主题模式 + 重点色）：只存在这台设备（不进服务器数据，换设备互不影响）
   useEffect(() => {
     try {
+      const m = localStorage.getItem(MODE_KEY);
+      const nextMode: Mode = m === 'light' || m === 'dark' || m === 'system' ? m : 'system';
       const v = localStorage.getItem(THEME_KEY);
-      if (v && (v in THEMES || /^#[0-9a-fA-F]{6}$/.test(v))) {
-        setTheme(v);
-        setThemeVars(resolveTheme(v));
-      }
+      const nextTheme = v && (v in THEMES || /^#[0-9a-fA-F]{6}$/.test(v)) ? v : 'red';
+      setMode(nextMode);
+      setTheme(nextTheme);
+      applyAppearance(nextMode, nextTheme);
     } catch {}
   }, []);
   const applyTheme = (value: string) => {
     setTheme(value);
-    setThemeVars(resolveTheme(value));
+    applyAppearance(mode, value);
     try {
       localStorage.setItem(THEME_KEY, value);
+    } catch {}
+  };
+  const applyMode = (value: Mode) => {
+    setMode(value);
+    applyAppearance(value, theme);
+    try {
+      localStorage.setItem(MODE_KEY, value);
     } catch {}
   };
   // 仅今天可勾选：只存在这台设备（不进服务器数据，换设备互不影响）；默认开启，没存过偏好就按开算
@@ -501,13 +528,13 @@ export default function Checklist({ initial }: { initial: Doc }) {
       localStorage.setItem(ONLY_TODAY_KEY, value ? '1' : '0');
     } catch {}
   };
-  // 系统深浅模式切换时，背景与边框要重新按当前主题取舍（浅色跟随、深色交还默认值）
+  // 系统深浅模式切换时重新解析外观（仅跟随系统时才真正变化，强制浅色/深色不受影响）
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => setThemeVars(resolveTheme(theme));
+    const onChange = () => applyAppearance(mode, theme);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, [theme]);
+  }, [theme, mode]);
   const toggleSection = (id: string, value: boolean) => {
     setOpen((o) => {
       const next = { ...o, [id]: value };
@@ -798,6 +825,8 @@ export default function Checklist({ initial }: { initial: Doc }) {
           showToast={showToast}
           onlyToday={onlyToday}
           onOnlyToday={applyOnlyToday}
+          mode={mode}
+          onMode={applyMode}
         />
       )}
 
@@ -1106,6 +1135,8 @@ function SettingsModal({
   showToast,
   onlyToday,
   onOnlyToday,
+  mode,
+  onMode,
 }: {
   theme: string;
   onTheme: (value: string) => void;
@@ -1118,6 +1149,8 @@ function SettingsModal({
   showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err') => void;
   onlyToday: boolean;
   onOnlyToday: (value: boolean) => void;
+  mode: Mode;
+  onMode: (value: Mode) => void;
 }) {
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
@@ -1300,7 +1333,31 @@ function SettingsModal({
                 <CrossIcon size={16} />
               </button>
             </div>
+            <div className="sheet-section">外观</div>
             <div className="sheet-card">
+              <div className="sheet-row static" aria-label="主题">
+                <span>主题</span>
+                <span className="mode-seg" role="radiogroup" aria-label="主题">
+                  {([
+                    ['light', '浅色', SunIcon],
+                    ['dark', '深色', MoonIcon],
+                    ['system', '跟随系统', MonitorIcon],
+                  ] as const).map(([id, label, Icon]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={'mode-seg-btn' + (mode === id ? ' on' : '')}
+                      role="radio"
+                      aria-checked={mode === id}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => onMode(id)}
+                    >
+                      <Icon size={18} />
+                    </button>
+                  ))}
+                </span>
+              </div>
               <button type="button" className="sheet-row" onClick={() => setView('colors')} aria-label="重点色">
                 <span className="sheet-dot" style={{ background: currentDot }} />
                 <span>重点色</span>
