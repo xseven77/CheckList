@@ -19,3 +19,4 @@ Thumbs.db
 *.tsbuildinfo
 *.log
 *.pid
+data/subscription.json

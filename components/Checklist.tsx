@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Day, type Event, type Group, type Item, type Section, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
-import { AlertIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
+import { AlertIcon, CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, CrossIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
@@ -966,12 +966,37 @@ function ItemRow({
   );
 }
 
-type ImportSummary = {
+type SyncSummary = {
   added: number;
   updated: number;
   unchanged: number;
   skipped: { recurring: number; cancelled: number; transparent: number; noUid: number; invalid: number };
 };
+
+type SubscriptionInfo = {
+  url: string;
+  intervalMinutes: number;
+  lastSyncAt: string | null;
+  lastSummary: SyncSummary | null;
+  lastError: string | null;
+};
+
+const INTERVAL_OPTIONS = [5, 15, 30, 60];
+
+function intervalLabel(minutes: number): string {
+  return minutes >= 60 ? `每 ${minutes / 60} 小时` : `每 ${minutes} 分钟`;
+}
+
+function formatSyncTime(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function skippedTotalOf(s: SyncSummary): number {
+  return s.skipped.recurring + s.skipped.cancelled + s.skipped.transparent + s.skipped.noUid + s.skipped.invalid;
+}
 
 function SettingsModal({
   theme,
@@ -997,8 +1022,8 @@ function SettingsModal({
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
   const close = useCallback(() => setClosing(true), []);
-  // 设置页分层（参考 Muse 设置页）：主页选项 → 重点色列表 → 自定义取色板 / 导入 / 导出
-  const [view, setView] = useState<'main' | 'colors' | 'custom' | 'import' | 'export'>('main');
+  // 设置页分层（参考 Muse 设置页）：主页选项 → 重点色列表 → 自定义取色板 / 日历订阅 / 刷新间隔 / 导出
+  const [view, setView] = useState<'main' | 'colors' | 'custom' | 'subscription' | 'interval' | 'export'>('main');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -1018,44 +1043,131 @@ function SettingsModal({
   const currentName = isCustom ? '自定义' : (THEMES[theme]?.name ?? '红色');
   const currentDot = isCustom ? theme : (THEMES[theme]?.accent ?? '#b0262f');
 
-  // 导入（原独立弹窗的逻辑，搬进设置）
-  const [importUrl, setImportUrl] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [importErr, setImportErr] = useState('');
-  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
-  const handleImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setImportErr('');
-    setImportResult(null);
-    const body = importUrl.trim() ? { url: importUrl.trim() } : null;
-    if (!body) {
-      setImportErr('请填写 .ics 订阅链接');
+  // 日历订阅：打开设置时读一次配置，主页的订阅行与订阅页共用
+  const [sub, setSub] = useState<SubscriptionInfo | null>(null);
+  const [subUrl, setSubUrl] = useState('');
+  const [subLoading, setSubLoading] = useState(true);
+  const [subSaving, setSubSaving] = useState(false);
+  const [subSyncing, setSubSyncing] = useState(false);
+  const [subErr, setSubErr] = useState('');
+  const [subResult, setSubResult] = useState<SyncSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/calendar/subscription');
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && data.subscription) {
+          setSub(data.subscription as SubscriptionInfo);
+          setSubUrl(data.subscription.url ?? '');
+        }
+      } catch {
+        // 订阅配置读不到时当作未配置，不阻塞设置页
+      } finally {
+        if (!cancelled) setSubLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 保存并同步：存下链接与间隔，立即同步一次
+  const handleSaveSubscription = async () => {
+    setSubErr('');
+    setSubResult(null);
+    if (!subUrl.trim()) {
+      setSubErr('请填写订阅链接');
       return;
     }
-    setImporting(true);
+    setSubSaving(true);
     try {
-      const res = await fetch('/api/calendar/import', {
-        method: 'POST',
+      const res = await fetch('/api/calendar/subscription', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ url: subUrl.trim(), intervalMinutes: sub?.intervalMinutes ?? 15 }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setImportErr(data.error || '导入失败，请稍后重试');
+        setSubErr(data.error || '保存失败，请稍后重试');
         return;
       }
-      setImportResult(data.summary as ImportSummary);
-      showToast(`导入完成：新增 ${data.summary.added}，更新 ${data.summary.updated}`, 'success');
-      await onImported();
+      if (data.subscription) {
+        setSub(data.subscription as SubscriptionInfo);
+        setSubUrl(data.subscription.url ?? subUrl.trim());
+      }
+      if (data.sync?.summary) {
+        setSubResult(data.sync.summary as SyncSummary);
+        showToast(`同步完成：新增 ${data.sync.summary.added}，更新 ${data.sync.summary.updated}`, 'success');
+        await onImported();
+      } else if (data.sync && !data.sync.ok) {
+        setSubErr(data.sync.error || '同步失败');
+      }
     } catch {
-      setImportErr('网络异常，导入未完成');
+      setSubErr('网络异常，保存未完成');
     } finally {
-      setImporting(false);
+      setSubSaving(false);
     }
   };
-  const importSkippedTotal = importResult
-    ? importResult.skipped.recurring + importResult.skipped.cancelled + importResult.skipped.transparent + importResult.skipped.noUid + importResult.skipped.invalid
-    : 0;
+
+  // 手动刷新：不改配置，立即同步一次
+  const handleManualSync = async () => {
+    setSubErr('');
+    setSubResult(null);
+    setSubSyncing(true);
+    try {
+      const res = await fetch('/api/calendar/sync', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSubErr(data.error || '同步失败，请稍后重试');
+        return;
+      }
+      if (data.subscription) setSub(data.subscription as SubscriptionInfo);
+      if (data.sync?.summary) {
+        setSubResult(data.sync.summary as SyncSummary);
+        showToast(`同步完成：新增 ${data.sync.summary.added}，更新 ${data.sync.summary.updated}`, 'success');
+        await onImported();
+      } else if (data.sync && !data.sync.ok) {
+        setSubErr(data.sync.error || '同步失败');
+      }
+    } catch {
+      setSubErr('网络异常，同步未完成');
+    } finally {
+      setSubSyncing(false);
+    }
+  };
+
+  const handleInterval = async (minutes: number) => {
+    setSubErr('');
+    try {
+      const res = await fetch('/api/calendar/subscription', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intervalMinutes: minutes }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSubErr(data.error || '保存失败，请稍后重试');
+        return;
+      }
+      if (data.subscription) setSub(data.subscription as SubscriptionInfo);
+    } catch {
+      setSubErr('网络异常，保存未完成');
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    try {
+      await fetch('/api/calendar/subscription', { method: 'DELETE' });
+      setSub(null);
+      setSubUrl('');
+      setSubResult(null);
+      setSubErr('');
+      showToast('已取消订阅', 'info');
+    } catch {
+      setSubErr('网络异常，取消未完成');
+    }
+  };
 
   // 导出（原独立弹窗的逻辑，搬进设置；导出成功后关掉设置，露出长图预览）
   const exportKeys = days.map((d) => dayKey(d));
@@ -1097,13 +1209,18 @@ function SettingsModal({
               </button>
             </div>
             <div className="sheet-card">
-              <button type="button" className="sheet-row" onClick={() => setView('import')} aria-label="导入">
+              <button type="button" className="sheet-row" onClick={() => setView('subscription')} aria-label="日历订阅">
                 <span className="sheet-icon">
-                  <DownloadIcon size={20} />
+                  <CalendarIcon size={20} />
                 </span>
-                <span>导入</span>
+                <span>日历订阅</span>
+                <span className="sheet-value">
+                  {subLoading ? '…' : sub && sub.url ? intervalLabel(sub.intervalMinutes) : '未配置'}
+                </span>
                 <ChevronRightIcon size={18} className="sheet-chev" />
               </button>
+            </div>
+            <div className="sheet-card">
               <button type="button" className="sheet-row" onClick={() => setView('export')} aria-label="导出">
                 <span className="sheet-icon">
                   <ShareIcon size={20} />
@@ -1182,45 +1299,108 @@ function SettingsModal({
             <p className="sheet-foot">点色块立即应用；返回后在“自定义...”能看到它。</p>
           </>
         )}
-        {view === 'import' && (
+        {view === 'subscription' && (
           <>
             <div className="sheet-head">
               <button type="button" className="sheet-back" onClick={() => setView('main')} aria-label="返回">
                 <ChevronLeftIcon size={20} />
               </button>
-              <div className="sheet-title">导入</div>
+              <div className="sheet-title">日历订阅</div>
             </div>
             <p className="sheet-foot" style={{ margin: '0 4px 16px' }}>
-              单向导入：只支持订阅链接，日历只读，不回写。按日历事件 UID 匹配已有事项，勾选状态原样保留；备注里的条例会自动拆成可勾选明细。
+              配好订阅链接后，会按刷新间隔在后台静默同步；也可以随时点手动刷新。同步是单向的，日历只读，不回写；按事件 UID 匹配已有事项，勾选状态原样保留。
             </p>
-            <form onSubmit={handleImport}>
-              <div className="sheet-field">
-                <label htmlFor="import-url">填写 .ics 订阅链接</label>
-                <input
-                  id="import-url"
-                  type="url"
-                  className="field"
-                  placeholder="https://…/calendar.ics"
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                />
-                <small style={{ color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                  支持 iOS 日历分享的 webcal:// 链接，会自动按 https 拉取。
-                </small>
-              </div>
-              {importErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{importErr}</div>}
-              {importResult && (
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  导入完成：新增 {importResult.added} · 更新 {importResult.updated} · 未变 {importResult.unchanged} · 跳过 {importSkippedTotal}
-                  {importSkippedTotal > 0 && (
-                    <>（重复 {importResult.skipped.recurring} / 已取消 {importResult.skipped.cancelled} / 空闲 {importResult.skipped.transparent} / 无 UID {importResult.skipped.noUid} / 无效 {importResult.skipped.invalid}）</>
-                  )}
-                </div>
-              )}
-              <button type="submit" className="sheet-action" disabled={importing}>
-                {importing ? '正在导入…' : '开始导入'}
+            <div className="sheet-field">
+              <label htmlFor="sub-url">订阅链接</label>
+              <input
+                id="sub-url"
+                type="url"
+                className="field"
+                placeholder="https://…/calendar.ics"
+                value={subUrl}
+                onChange={(e) => setSubUrl(e.target.value)}
+              />
+              <small style={{ color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                支持 iOS 日历分享的 webcal:// 链接，会自动按 https 拉取。
+              </small>
+            </div>
+            <div className="sheet-card">
+              <button type="button" className="sheet-row" onClick={() => setView('interval')} aria-label="刷新间隔">
+                <span>刷新间隔</span>
+                <span className="sheet-value">{intervalLabel(sub?.intervalMinutes ?? 15)}</span>
+                <ChevronRightIcon size={18} className="sheet-chev" />
               </button>
-            </form>
+            </div>
+            {sub && sub.url && (
+              <div style={{ fontSize: 13, color: 'var(--muted)', margin: '12px 4px 0' }}>
+                {sub.lastSyncAt ? (
+                  <>
+                    上次同步：{formatSyncTime(sub.lastSyncAt)}
+                    {sub.lastSummary && (
+                      <>
+                        {' '}· 新增 {sub.lastSummary.added} · 更新 {sub.lastSummary.updated} · 未变{' '}
+                        {sub.lastSummary.unchanged} · 跳过 {skippedTotalOf(sub.lastSummary)}
+                      </>
+                    )}
+                    {sub.lastError && <> · 上次失败：{sub.lastError}</>}
+                  </>
+                ) : (
+                  '尚未同步'
+                )}
+              </div>
+            )}
+            {subErr && <div style={{ color: 'var(--red)', fontSize: 13, margin: '12px 4px 0' }}>{subErr}</div>}
+            {subResult && (
+              <div style={{ fontSize: 13, color: 'var(--muted)', margin: '12px 4px 0' }}>
+                同步完成：新增 {subResult.added} · 更新 {subResult.updated} · 未变 {subResult.unchanged} · 跳过{' '}
+                {skippedTotalOf(subResult)}
+              </div>
+            )}
+            <button type="button" className="sheet-action" disabled={subSaving} onClick={handleSaveSubscription}>
+              {subSaving ? '正在保存…' : '保存并同步'}
+            </button>
+            {sub && sub.url && (
+              <button type="button" className="sheet-action secondary" disabled={subSyncing} onClick={handleManualSync}>
+                {subSyncing ? '正在同步…' : '手动刷新'}
+              </button>
+            )}
+            {sub && sub.url && (
+              <button type="button" className="sheet-danger" onClick={handleCancelSubscription}>
+                取消订阅
+              </button>
+            )}
+          </>
+        )}
+        {view === 'interval' && (
+          <>
+            <div className="sheet-head">
+              <button type="button" className="sheet-back" onClick={() => setView('subscription')} aria-label="返回">
+                <ChevronLeftIcon size={20} />
+              </button>
+              <div className="sheet-title">刷新间隔</div>
+            </div>
+            <div className="sheet-card">
+              {INTERVAL_OPTIONS.map((m) => {
+                const sel = (sub?.intervalMinutes ?? 15) === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    className="sheet-row"
+                    onClick={() => handleInterval(m)}
+                    aria-label={intervalLabel(m)}
+                  >
+                    <span>{intervalLabel(m)}</span>
+                    {sel && (
+                      <span className="sheet-check">
+                        <CheckIcon size={16} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="sheet-foot">按这个间隔在后台静默同步；也可以随时手动刷新。</p>
           </>
         )}
         {view === 'export' && (

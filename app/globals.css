@@ -855,6 +855,10 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 .picker-cell { aspect-ratio: 1; border: none; border-radius: 8px; display: grid; place-content: center; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .picker-cell.sel { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px rgba(0,0,0,.3); }
 .sheet-foot { font-size: 12.5px; color: var(--muted); margin: 12px 4px 0; }
+.sheet-check { margin-left: auto; color: var(--red); display: grid; }
+.sheet-action.secondary { margin-top: 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.sheet-danger { width: 100%; margin-top: 16px; padding: 12px; border: none; background: none; color: var(--err); font-size: 16px; cursor: pointer; }
+
 .sheet-card + .sheet-card { margin-top: 16px; }
 .sheet-icon { width: 24px; height: 24px; display: grid; place-content: center; color: var(--ink); flex: none; }
 .sheet-field { margin-bottom: 16px; }
