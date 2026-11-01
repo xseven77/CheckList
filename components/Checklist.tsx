@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
 import { type Change, type Checklist as Doc, type Day, type Event, type Group, type Item, type Section, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
-import { AlertIcon, CheckIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
+import { AlertIcon, CheckIcon, ChevronLeftIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
 const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
@@ -55,6 +55,47 @@ function resolveTheme(value: string): { accent: string; soft: string; on: string
     imgSoft: mixWithWhite(accent, 0.9),
     imgBorder: mixWithWhite(accent, 0.75),
   };
+}
+/** HSL → #rrggbb（取色板用） */
+function hslToHex(h: number, s: number, l: number): string {
+  const sn = s / 100, ln = l / 100;
+  const c = (1 - Math.abs(2 * ln - 1)) * sn;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = ln - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const to = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+/** 取色板：首行灰阶 + 5 档明暗 × 12 色相 */
+function buildPickerColors(): string[] {
+  const colors: string[] = [];
+  for (let i = 0; i < 12; i++) colors.push(hslToHex(0, 0, 100 - (100 / 11) * i));
+  for (const l of [25, 40, 55, 70, 85]) {
+    for (let h = 0; h < 360; h += 30) colors.push(hslToHex(h, 85, l));
+  }
+  return colors;
+}
+const PICKER_COLORS = buildPickerColors();
+/** 导出标题默认：单日 = 当天日期，多日 = 日期区间；非日期键回退为“清单” */
+function defaultExportTitle(dayKeys: string[]): string {
+  const dates = dayKeys.filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+  if (!dates.length) return '清单';
+  const fmt = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${y}年${m}月${d}日`;
+  };
+  if (dates.length === 1) return fmt(dates[0]);
+  const [y1, m1, d1] = dates[0].split('-').map(Number);
+  const [y2, m2, d2] = dates[dates.length - 1].split('-').map(Number);
+  if (y1 === y2 && m1 === m2) return `${y1}年${m1}月${d1}日—${d2}日`;
+  if (y1 === y2) return `${y1}年${m1}月${d1}日—${m2}月${d2}日`;
+  return `${fmt(dates[0])}—${fmt(dates[dates.length - 1])}`;
 }
 /** 把主题色写进 CSS 变量（内联变量优先于样式表，预设与自定义统一走这里） */
 function setThemeVars(t: { accent: string; soft: string; on: string }) {
@@ -522,14 +563,14 @@ export default function Checklist({ initial }: { initial: Doc }) {
   // ---------- 导出长图 ----------
   const [showExport, setShowExport] = useState(false);
   /** 按勾选的日期导出长图；返回是否成功（成功后由调用方关闭选择框） */
-  const doExport = async (dayKeys: string[]): Promise<boolean> => {
+  const doExport = async (dayKeys: string[], title: string): Promise<boolean> => {
     setExporting(true);
     showToast('正在生成长图…', 'info', 1500);
     try {
       const full = docRef.current;
       const filtered: Doc = { ...full, days: full.days.filter((d) => dayKeys.includes(dayKey(d))) };
       const t = resolveTheme(theme);
-      const blob = await drawChecklist(filtered, { red: t.accent, soft: t.imgSoft, border: t.imgBorder });
+      const blob = await drawChecklist(filtered, { red: t.accent, soft: t.imgSoft, border: t.imgBorder }, title);
       setPreview(URL.createObjectURL(blob));
       showToast('长图已生成并开启预览', 'success');
       return true;
@@ -730,8 +771,8 @@ export default function Checklist({ initial }: { initial: Doc }) {
           currentKey={selected}
           exporting={exporting}
           onClose={() => setShowExport(false)}
-          onExport={async (keys) => {
-            if (await doExport(keys)) setShowExport(false);
+          onExport={async (keys, title) => {
+            if (await doExport(keys, title)) setShowExport(false);
           }}
         />
       )}
@@ -1040,11 +1081,14 @@ function ExportModal({
   currentKey: string;
   exporting: boolean;
   onClose: () => void;
-  onExport: (keys: string[]) => Promise<void>;
+  onExport: (keys: string[], title: string) => Promise<void>;
 }) {
   const keys = days.map((d) => dayKey(d));
   // 默认只勾当前页；当前页不在清单里时默认全选（避免打开就是空选）
   const [sel, setSel] = useState<string[]>(() => (keys.includes(currentKey) ? [currentKey] : keys));
+  // 标题：null = 没改过，显示默认（所选日期）；改过就用改过的，清空则回到默认
+  const [title, setTitle] = useState<string | null>(null);
+  const effTitle = title !== null && title.trim() ? title : defaultExportTitle(sel);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -1059,6 +1103,17 @@ function ExportModal({
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <h2>导出长图</h2>
         <p className="sub">默认只导出当前页；也可以全选或勾选部分日期，再生成长图。</p>
+        <div className="modal-field" style={{ marginBottom: 14 }}>
+          <label htmlFor="export-title">标题</label>
+          <input
+            id="export-title"
+            type="text"
+            className="field"
+            value={title ?? defaultExportTitle(sel)}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={defaultExportTitle(sel)}
+          />
+        </div>
         <div className="modal-actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}>
           <button type="button" className="btn sm" onClick={() => setSel(keys)}>
             全选
@@ -1096,7 +1151,7 @@ function ExportModal({
           <button type="button" className="btn" onClick={onClose} disabled={exporting}>
             取消
           </button>
-          <button type="button" className="btn primary" disabled={sel.length === 0 || exporting} onClick={() => onExport(sel)}>
+          <button type="button" className="btn primary" disabled={sel.length === 0 || exporting} onClick={() => onExport(sel, effTitle)}>
             {exporting ? '正在生成…' : `导出图片${sel.length ? `（${sel.length} 天）` : ''}`}
           </button>
         </div>
@@ -1117,7 +1172,8 @@ function SettingsModal({
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
   const close = useCallback(() => setClosing(true), []);
-  const colorInputRef = useRef<HTMLInputElement | null>(null);
+  // 自定义取色器是内置的第二页（点“自定义...”进，左上角返回）
+  const [view, setView] = useState<'list' | 'custom'>('list');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -1133,6 +1189,7 @@ function SettingsModal({
     };
   }, []);
   const isCustom = /^#[0-9a-fA-F]{6}$/.test(theme);
+  const customHex = isCustom ? theme : '#7c5cff';
   return (
     <div
       className={'sheet-backdrop' + (closing ? ' closing' : '')}
@@ -1149,51 +1206,71 @@ function SettingsModal({
         }}
       >
         <div className="sheet-head">
-          <button type="button" className="sheet-close" onClick={close} aria-label="关闭">
-            <CrossIcon size={16} />
-          </button>
-          <div className="sheet-title">设置</div>
+          {view === 'custom' ? (
+            <button type="button" className="sheet-back" onClick={() => setView('list')} aria-label="返回">
+              <ChevronLeftIcon size={20} />
+            </button>
+          ) : (
+            <button type="button" className="sheet-close" onClick={close} aria-label="关闭">
+              <CrossIcon size={16} />
+            </button>
+          )}
+          <div className="sheet-title">{view === 'custom' ? '颜色' : '设置'}</div>
         </div>
-        <div className="sheet-label">重点色</div>
-        <div className="sheet-card">
-          {Object.keys(THEMES).map((id) => {
-            const t = THEMES[id];
-            const sel = theme === id;
-            return (
-              <button key={id} type="button" className="sheet-row" onClick={() => onTheme(id)} aria-label={t.name}>
-                <span className="sheet-dot" style={{ background: t.accent }}>
-                  {sel && <CheckIcon size={14} />}
+        {view === 'list' ? (
+          <>
+            <div className="sheet-label">重点色</div>
+            <div className="sheet-card">
+              {Object.keys(THEMES).map((id) => {
+                const t = THEMES[id];
+                const sel = theme === id;
+                return (
+                  <button key={id} type="button" className="sheet-row" onClick={() => onTheme(id)} aria-label={t.name}>
+                    <span className="sheet-dot" style={{ background: t.accent }}>
+                      {sel && <CheckIcon size={12} />}
+                    </span>
+                    <span>{t.name}</span>
+                  </button>
+                );
+              })}
+              <button type="button" className="sheet-row" onClick={() => setView('custom')} aria-label="自定义颜色">
+                <span
+                  className="sheet-dot"
+                  style={{ background: isCustom ? theme : 'conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)' }}
+                >
+                  {isCustom && <CheckIcon size={12} />}
                 </span>
-                <span>{t.name}</span>
+                <span>自定义...</span>
               </button>
-            );
-          })}
-          <button
-            type="button"
-            className="sheet-row"
-            onClick={() => colorInputRef.current?.click()}
-            aria-label="自定义颜色"
-          >
-            <span
-              className="sheet-dot"
-              style={{ background: isCustom ? theme : 'conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)' }}
-            >
-              {isCustom && <CheckIcon size={14} />}
-            </span>
-            <span>自定义...</span>
-          </button>
-        </div>
-        <p className="sheet-foot">只保存在这台设备上，导出长图也会用同一个重点色。</p>
-        {/* 原生取色器：iOS 上点开就是系统取色器（网格 / 光谱 / 滑块） */}
-        <input
-          ref={colorInputRef}
-          type="color"
-          value={isCustom ? theme : '#7c5cff'}
-          onChange={(e) => onTheme(e.target.value)}
-          aria-hidden="true"
-          tabIndex={-1}
-          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-        />
+            </div>
+            <p className="sheet-foot">只保存在这台设备上，导出长图也会用同一个重点色。</p>
+          </>
+        ) : (
+          <>
+            <div className="picker-preview">
+              <span className="picker-swatch" style={{ background: customHex }} />
+              <span className="picker-hex">{customHex.toUpperCase()}</span>
+            </div>
+            <div className="picker-grid">
+              {PICKER_COLORS.map((hex) => {
+                const sel = theme === hex;
+                return (
+                  <button
+                    key={hex}
+                    type="button"
+                    className={'picker-cell' + (sel ? ' sel' : '')}
+                    style={{ background: hex, color: luminance(hex) > 0.6 ? 'rgba(0,0,0,.65)' : '#fff' }}
+                    onClick={() => onTheme(hex)}
+                    aria-label={hex}
+                  >
+                    {sel && <CheckIcon size={12} />}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="sheet-foot">点色块立即应用；返回后在“自定义...”能看到它。</p>
+          </>
+        )}
       </div>
     </div>
   );

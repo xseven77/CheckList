@@ -25,7 +25,6 @@ type Op =
   | { k: 't'; s: string; x: number; y: number; font: string; color: string; strike?: boolean; strikeColor?: string }
   | { k: 'hr'; y: number; x: number; w: number; color?: string }
   | { k: 'dot'; x: number; y: number; filled: boolean }
-  | { k: 'seal'; x: number; y: number }
   | { k: 'box'; x: number; y: number; w: number; h: number; bg?: string; border?: string; r?: number }
   | { k: 'vline'; x: number; y1: number; y2: number }
   | { k: 'checkbox'; x: number; y: number; size: number; checked: boolean; indeterminate?: boolean; isCircle?: boolean }
@@ -34,7 +33,7 @@ type Op =
   | { k: 'bar'; x: number; y: number; w: number; h: number; pct: number };
 
 /** 把整份清单画成一张高清长图，分行优雅展示所有事项与复选状态；accent 不传则用默认红 */
-export function drawChecklist(doc: Checklist, accent?: { red: string; soft: string; border: string }): Promise<Blob> {
+export function drawChecklist(doc: Checklist, accent?: { red: string; soft: string; border: string }, title?: string): Promise<Blob> {
   const W = 1080;
   const PAL = accent ? { ...P, red: accent.red, redSoft: accent.soft, redBorder: accent.border } : P;
   const meas = document.createElement('canvas').getContext('2d')!;
@@ -84,14 +83,11 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
   const CX = 196;
   const CW = W - CX - 56;
 
-  // ---------------- 1. 顶部 Header ----------------
+  // ---------------- 1. 顶部 Header（无喜字、无副标题，标题由导出人定） ----------------
   y = 56;
-  ops.push({ k: 'seal', x: L, y });
-  const topY = y;
-  y += 6;
-  text(doc.title, L + 96, W - L - 156, 44, P.ink, 700, SERIF, 1.3);
-  text(doc.subtitle, L + 96, W - L - 156, 22, P.muted, 400, SANS, 1.4);
-  y = Math.max(y, topY + 76) + 20;
+  const headTitle = title?.trim() ? title : doc.title;
+  text(headTitle, L, W - 2 * L, 44, P.ink, 700, SERIF, 1.3);
+  y += 20;
 
   // ---------------- 2. 进度统计卡片 ----------------
   let ti = 0, td = 0, ii = 0, id = 0;
@@ -149,17 +145,7 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
   // 进度条
   ops.push({ k: 'bar', x: L + 22, y, w: cardW - 44, h: 8, pct });
   y += 18;
-
-  // 提示语
-  ops.push({
-    k: 't',
-    s: '✓ 已完成事项与明细均划线标记 · 手机长按图片可保存至相册',
-    x: L + 22,
-    y,
-    font: `400 19px ${SANS}`,
-    color: P.muted,
-  });
-  y += 24;
+  y += 8;
   cardBox.h = y - cardTop;
   y += 34;
 
@@ -338,7 +324,7 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
     minute: '2-digit',
   });
   text(timeStr + ' · CheckList 婚礼筹备清单', L, W - 2 * L, 20, P.muted, 400, SANS, 1.5);
-  y += 48;
+  y += 96;
 
   // ---------------- 5. Canvas 渲染生成 ----------------
   // 动态选择缩放比例：确保在不超过 iOS Safari 16384px 限制的同时具备高清分辨率
@@ -492,27 +478,6 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
       ctx.textBaseline = 'middle';
       const label = o.k === 'pill' ? o.text : o.s;
       ctx.fillText(label, o.x + o.w / 2, o.y + o.h / 2 + 0.5);
-      ctx.textAlign = 'start';
-      ctx.textBaseline = 'top';
-    } else if (o.k === 'seal') {
-      const size = 76;
-      const r = 16;
-      roundPath(o.x, o.y, size, size, r);
-      ctx.fillStyle = PAL.red;
-      ctx.fill();
-
-      // 内层细框
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 1.5;
-      const pad = 4;
-      roundPath(o.x + pad, o.y + pad, size - pad * 2, size - pad * 2, r - 3);
-      ctx.stroke();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `700 46px ${SERIF}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('囍', o.x + size / 2, o.y + size / 2 + 1);
       ctx.textAlign = 'start';
       ctx.textBaseline = 'top';
     }
