@@ -970,6 +970,7 @@ type SyncSummary = {
   added: number;
   updated: number;
   unchanged: number;
+  deleted: number;
   skipped: { recurring: number; cancelled: number; transparent: number; noUid: number; invalid: number };
 };
 
@@ -1338,7 +1339,7 @@ function SettingsModal({
                     上次同步：{formatSyncTime(sub.lastSyncAt)}
                     {sub.lastSummary && (
                       <>
-                        {' '}· 新增 {sub.lastSummary.added} · 更新 {sub.lastSummary.updated} · 未变{' '}
+                        {' '}· 新增 {sub.lastSummary.added} · 更新 {sub.lastSummary.updated} · 删除 {sub.lastSummary.deleted} · 未变{' '}
                         {sub.lastSummary.unchanged} · 跳过 {skippedTotalOf(sub.lastSummary)}
                       </>
                     )}
@@ -1352,7 +1353,7 @@ function SettingsModal({
             {subErr && <div style={{ color: 'var(--red)', fontSize: 13, margin: '12px 4px 0' }}>{subErr}</div>}
             {subResult && (
               <div style={{ fontSize: 13, color: 'var(--muted)', margin: '12px 4px 0' }}>
-                同步完成：新增 {subResult.added} · 更新 {subResult.updated} · 未变 {subResult.unchanged} · 跳过{' '}
+                同步完成：新增 {subResult.added} · 更新 {subResult.updated} · 删除 {subResult.deleted} · 未变 {subResult.unchanged} · 跳过{' '}
                 {skippedTotalOf(subResult)}
               </div>
             )}

@@ -121,6 +121,7 @@ export type CalendarImportSummary = {
   added: number;
   updated: number;
   unchanged: number;
+  deleted: number;
   skipped: IcsSkipped;
 };
 
@@ -137,7 +138,7 @@ export function importCalendarEvents(
 ): Promise<{ summary: CalendarImportSummary; rev: number }> {
   return serial(async () => {
     const doc = await readState();
-    const summary: CalendarImportSummary = { added: 0, updated: 0, unchanged: 0, skipped };
+    const summary: CalendarImportSummary = { added: 0, updated: 0, unchanged: 0, deleted: 0, skipped };
 
     const byUid = new Map<string, { ev: Event; day: Day }>();
     for (const d of doc.days) {
@@ -155,7 +156,8 @@ export function importCalendarEvents(
       return target;
     };
 
-    for (const p of sortParsed(dedupeByUid(parsed))) {
+    const feedList = sortParsed(dedupeByUid(parsed));
+    for (const p of feedList) {
       const found = byUid.get(p.uid);
       if (found) {
         const { ev, day: oldDay } = found;
@@ -214,6 +216,20 @@ export function importCalendarEvents(
         summary.added += 1;
       }
     }
+
+    // 删除：在订阅源里已经没有的同步事项（按 calUid 判断），在系统里也删掉；
+    // 只动带 calUid 的同步事项，手工事项（无 calUid）永不被触碰
+    const feedUids = new Set(feedList.map((p) => p.uid));
+    for (const d of doc.days) {
+      const kept = d.events.filter((ev) => !ev.calUid || feedUids.has(ev.calUid));
+      const removed = d.events.length - kept.length;
+      if (removed > 0) {
+        d.events = kept;
+        summary.deleted += removed;
+      }
+    }
+    // 删空了的同步日期随之删除（手工日期不动）
+    doc.days = doc.days.filter((d) => !d.date || d.events.length > 0);
 
     // 手工日期在前保持原顺序，同步日期按 date 排；同步日期内事项按时间排（全天在前）
     const legacy = doc.days.filter((d) => !d.date);

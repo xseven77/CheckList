@@ -13,9 +13,9 @@
   --err: #b0262f;
   --toast-bg: #2b1f21;
   --toast-fg: #faf7f6;
-  /* 不依赖外网字体，国内服务器也能正常显示 */
-  --display: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
-  --body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  /* 中文字体统一思源黑体（Noto Sans SC，自托管随应用一起发，运行时不请求外网字体服务） */
+  --display: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --body: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --r: 12px;
   color-scheme: light;
   padding-top: env(safe-area-inset-top, 0px);
@@ -840,7 +840,7 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 .sheet-head { display: flex; align-items: center; gap: 12px; padding: 16px 0 20px; }
 .sheet-close, .sheet-back { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-content: center; color: var(--ink); cursor: pointer; flex: none; }
-.sheet-title { flex: 1; font: 800 34px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--ink); }
+.sheet-title { flex: 1; font: 800 34px/1.2 var(--display); color: var(--ink); }
 .sheet-card { background: var(--surface); border-radius: 24px; overflow: hidden; }
 .sheet-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }
 .sheet-value { flex: 1; text-align: right; color: var(--muted); font-size: 16px; }

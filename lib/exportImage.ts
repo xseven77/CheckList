@@ -18,8 +18,7 @@ const P = {
   okGreenBorder: '#c3e8ca',
 };
 
-const SANS = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif';
-const SERIF = '"Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif';
+const SANS = '"Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
 type Op =
   | { k: 't'; s: string; x: number; y: number; font: string; color: string; strike?: boolean; strikeColor?: string }
@@ -86,7 +85,7 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
   // ---------------- 1. 顶部 Header（无喜字、无副标题，标题由导出人定） ----------------
   y = 56;
   const headTitle = title?.trim() ? title : doc.title;
-  text(headTitle, L, W - 2 * L, 44, P.ink, 700, SERIF, 1.3);
+  text(headTitle, L, W - 2 * L, 44, P.ink, 700, SANS, 1.3);
   y += 20;
 
   // ---------------- 2. 进度统计卡片 ----------------
@@ -169,8 +168,8 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
     const [dDone, dTotal] = dayStats[d.day] ?? [0, 0];
 
     // 左侧日期列
-    ops.push({ k: 't', s: String(d.day), x: L + 4, y: y - 2, font: `700 54px ${SERIF}`, color: PAL.red });
-    ops.push({ k: 't', s: '号', x: L + 4 + (d.day >= 10 ? 64 : 34), y: y + 22, font: `700 22px ${SERIF}`, color: PAL.red });
+    ops.push({ k: 't', s: String(d.day), x: L + 4, y: y - 2, font: `700 54px ${SANS}`, color: PAL.red });
+    ops.push({ k: 't', s: '号', x: L + 4 + (d.day >= 10 ? 64 : 34), y: y + 22, font: `700 22px ${SANS}`, color: PAL.red });
 
     // 日期进度小胶囊
     const dayPillText = `${dDone}/${dTotal}`;
