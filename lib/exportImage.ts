@@ -18,7 +18,7 @@ const P = {
   okGreenBorder: '#c3e8ca',
 };
 
-const SANS = '"Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+const SANS = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
 
 type Op =
   | { k: 't'; s: string; x: number; y: number; font: string; color: string; strike?: boolean; strikeColor?: string }

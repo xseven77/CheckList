@@ -13,9 +13,9 @@
   --err: #b0262f;
   --toast-bg: #2b1f21;
   --toast-fg: #faf7f6;
-  /* 中文字体统一思源黑体（Noto Sans SC，自托管随应用一起发，运行时不请求外网字体服务） */
-  --display: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --body: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  /* 中文字体用系统字体：苹果设备上就是苹方，不用 webfont、不下载字体文件 */
+  --display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --r: 12px;
   color-scheme: light;
   padding-top: env(safe-area-inset-top, 0px);
