@@ -2,7 +2,7 @@
   "name": "checklist",
   "version": "1.0.0",
   "private": true,
-  "description": "婚礼筹备清单：可勾选、编辑明细、导出长图，数据存成 JSON 文件",
+  "description": "日程清单：可勾选、导出长图，数据存成 JSON 文件",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

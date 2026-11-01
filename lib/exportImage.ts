@@ -322,7 +322,7 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
     hour: '2-digit',
     minute: '2-digit',
   });
-  text(timeStr + ' · CheckList 婚礼筹备清单', L, W - 2 * L, 20, P.muted, 400, SANS, 1.5);
+  text(timeStr + ' · CheckList', L, W - 2 * L, 20, P.muted, 400, SANS, 1.5);
   y += 96;
 
   // ---------------- 5. Canvas 渲染生成 ----------------
