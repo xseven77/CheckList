@@ -305,7 +305,6 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [showImport, setShowImport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<string>('red');
 
@@ -580,7 +579,6 @@ export default function Checklist({ initial }: { initial: Doc }) {
   }, [doc, selected]);
 
   // ---------- 导出长图 ----------
-  const [showExport, setShowExport] = useState(false);
   /** 按勾选的日期导出长图；返回是否成功（成功后由调用方关闭选择框） */
   const doExport = async (dayKeys: string[], title: string): Promise<boolean> => {
     setExporting(true);
@@ -665,12 +663,6 @@ export default function Checklist({ initial }: { initial: Doc }) {
               </button>
             </div>
             <div className="pill">
-              <button type="button" className="pill-btn" title="从日历导入" onClick={() => setShowImport(true)}>
-                <DownloadIcon />
-              </button>
-              <button type="button" className="pill-btn" title="导出长图" onClick={() => setShowExport(true)} disabled={exporting}>
-                <ShareIcon />
-              </button>
               <button type="button" className="pill-btn" title="设置" onClick={() => setShowSettings(true)}>
                 <GearIcon />
               </button>
@@ -776,28 +768,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
         </div>
       )}
 
-      {showImport && (
-        <ImportModal
-          onClose={() => setShowImport(false)}
-          onImported={refetch}
-          showToast={showToast}
-        />
-      )}
-
-      {showExport && (
-        <ExportModal
+      {showSettings && (
+        <SettingsModal
+          theme={theme}
+          onTheme={applyTheme}
+          onClose={() => setShowSettings(false)}
           days={doc.days}
           currentKey={selected}
           exporting={exporting}
-          onClose={() => setShowExport(false)}
-          onExport={async (keys, title) => {
-            if (await doExport(keys, title)) setShowExport(false);
-          }}
+          onExport={doExport}
+          onImported={refetch}
+          showToast={showToast}
         />
-      )}
-
-      {showSettings && (
-        <SettingsModal theme={theme} onTheme={applyTheme} onClose={() => setShowSettings(false)} />
       )}
 
       {preview && (
@@ -991,208 +973,32 @@ type ImportSummary = {
   skipped: { recurring: number; cancelled: number; transparent: number; noUid: number; invalid: number };
 };
 
-function ImportModal({
-  onClose,
-  onImported,
-  showToast,
-}: {
-  onClose: () => void;
-  onImported: () => Promise<void>;
-  showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err') => void;
-}) {
-  const [url, setUrl] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState('');
-  const [result, setResult] = useState<ImportSummary | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr('');
-    setResult(null);
-    const body = url.trim() ? { url: url.trim() } : null;
-    if (!body) {
-      setErr('请填写 .ics 订阅链接');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch('/api/calendar/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErr(data.error || '导入失败，请稍后重试');
-        return;
-      }
-      setResult(data.summary as ImportSummary);
-      showToast(`导入完成：新增 ${data.summary.added}，更新 ${data.summary.updated}`, 'success');
-      await onImported();
-    } catch {
-      setErr('网络异常，导入未完成');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const skippedTotal = result
-    ? result.skipped.recurring + result.skipped.cancelled + result.skipped.transparent + result.skipped.noUid + result.skipped.invalid
-    : 0;
-
-  return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="从日历导入">
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2>从日历导入</h2>
-        <p className="sub">单向导入：只支持订阅链接，日历只读，不回写。按日历事件 UID 匹配已有事项，勾选状态原样保留；备注里的条例会自动拆成可勾选明细。</p>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <div className="modal-field">
-            <label htmlFor="import-url">填写 .ics 订阅链接</label>
-            <input
-              id="import-url"
-              type="url"
-              className="field"
-              placeholder="https://…/calendar.ics"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <small style={{ color: 'var(--muted)', marginTop: 4, display: 'block' }}>支持 iOS 日历分享的 webcal:// 链接，会自动按 https 拉取。</small>
-          </div>
-          {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
-          {result && (
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              导入完成：新增 {result.added} · 更新 {result.updated} · 未变 {result.unchanged} · 跳过 {skippedTotal}
-              {skippedTotal > 0 && (
-                <>（重复 {result.skipped.recurring} / 已取消 {result.skipped.cancelled} / 空闲 {result.skipped.transparent} / 无 UID {result.skipped.noUid} / 无效 {result.skipped.invalid}）</>
-              )}
-            </div>
-          )}
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose} disabled={submitting}>
-              {result ? '完成' : '取消'}
-            </button>
-            <button type="submit" className="btn primary" disabled={submitting}>
-              {submitting ? '正在导入…' : '开始导入'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function ExportModal({
-  days,
-  currentKey,
-  exporting,
-  onClose,
-  onExport,
-}: {
-  days: Day[];
-  currentKey: string;
-  exporting: boolean;
-  onClose: () => void;
-  onExport: (keys: string[], title: string) => Promise<void>;
-}) {
-  const keys = days.map((d) => dayKey(d));
-  // 默认只勾当前页；当前页不在清单里时默认全选（避免打开就是空选）
-  const [sel, setSel] = useState<string[]>(() => (keys.includes(currentKey) ? [currentKey] : keys));
-  // 标题：null = 没改过，显示默认（所选日期）；改过就用改过的，清空则回到默认
-  const [title, setTitle] = useState<string | null>(null);
-  const effTitle = title !== null && title.trim() ? title : defaultExportTitle(sel);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  const toggle = (k: string) => setSel((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
-  const currentInList = keys.includes(currentKey);
-  return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="导出长图">
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2>导出长图</h2>
-        <p className="sub">默认只导出当前页；也可以全选或勾选部分日期，再生成长图。</p>
-        <div className="modal-field" style={{ marginBottom: 14 }}>
-          <label htmlFor="export-title">标题</label>
-          <input
-            id="export-title"
-            type="text"
-            className="field"
-            value={title ?? defaultExportTitle(sel)}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={defaultExportTitle(sel)}
-          />
-        </div>
-        <div className="modal-actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}>
-          <button type="button" className="btn sm" onClick={() => setSel(keys)}>
-            全选
-          </button>
-          <button
-            type="button"
-            className="btn sm"
-            onClick={() => setSel(currentInList ? [currentKey] : [])}
-            disabled={!currentInList}
-          >
-            仅当前
-          </button>
-          <button type="button" className="btn sm quiet" onClick={() => setSel([])}>
-            全不选
-          </button>
-        </div>
-        <div className="export-days">
-          {days.map((d) => {
-            const k = dayKey(d);
-            const dt = d.date ? parseDateKey(d.date) : null;
-            const label = dt ? `${dt.getMonth() + 1}月${dt.getDate()}日 周${WEEKDAYS[dt.getDay()]}` : `第${d.day}天`;
-            return (
-              <label key={k} className="export-day">
-                <input type="checkbox" checked={sel.includes(k)} onChange={() => toggle(k)} />
-                <span>
-                  {label}
-                  {k === currentKey ? ' · 当前' : ''}
-                </span>
-                <small>{d.events.length} 个事项</small>
-              </label>
-            );
-          })}
-        </div>
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose} disabled={exporting}>
-            取消
-          </button>
-          <button type="button" className="btn primary" disabled={sel.length === 0 || exporting} onClick={() => onExport(sel, effTitle)}>
-            {exporting ? '正在生成…' : `导出图片${sel.length ? `（${sel.length} 天）` : ''}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SettingsModal({
   theme,
   onTheme,
   onClose,
+  days,
+  currentKey,
+  exporting,
+  onExport,
+  onImported,
+  showToast,
 }: {
   theme: string;
   onTheme: (value: string) => void;
   onClose: () => void;
+  days: Day[];
+  currentKey: string;
+  exporting: boolean;
+  onExport: (keys: string[], title: string) => Promise<boolean>;
+  onImported: () => Promise<void>;
+  showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err') => void;
 }) {
   // 关闭时先播滑出动画，动画结束后再真正卸载
   const [closing, setClosing] = useState(false);
   const close = useCallback(() => setClosing(true), []);
-  // 设置页分层（参考 Muse 设置页）：主页选项 → 重点色列表 → 自定义取色板
-  const [view, setView] = useState<'main' | 'colors' | 'custom'>('main');
+  // 设置页分层（参考 Muse 设置页）：主页选项 → 重点色列表 → 自定义取色板 / 导入 / 导出
+  const [view, setView] = useState<'main' | 'colors' | 'custom' | 'import' | 'export'>('main');
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
@@ -1211,6 +1017,54 @@ function SettingsModal({
   const customHex = isCustom ? theme : '#7c5cff';
   const currentName = isCustom ? '自定义' : (THEMES[theme]?.name ?? '红色');
   const currentDot = isCustom ? theme : (THEMES[theme]?.accent ?? '#b0262f');
+
+  // 导入（原独立弹窗的逻辑，搬进设置）
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importErr, setImportErr] = useState('');
+  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+  const handleImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportErr('');
+    setImportResult(null);
+    const body = importUrl.trim() ? { url: importUrl.trim() } : null;
+    if (!body) {
+      setImportErr('请填写 .ics 订阅链接');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await fetch('/api/calendar/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setImportErr(data.error || '导入失败，请稍后重试');
+        return;
+      }
+      setImportResult(data.summary as ImportSummary);
+      showToast(`导入完成：新增 ${data.summary.added}，更新 ${data.summary.updated}`, 'success');
+      await onImported();
+    } catch {
+      setImportErr('网络异常，导入未完成');
+    } finally {
+      setImporting(false);
+    }
+  };
+  const importSkippedTotal = importResult
+    ? importResult.skipped.recurring + importResult.skipped.cancelled + importResult.skipped.transparent + importResult.skipped.noUid + importResult.skipped.invalid
+    : 0;
+
+  // 导出（原独立弹窗的逻辑，搬进设置；导出成功后关掉设置，露出长图预览）
+  const exportKeys = days.map((d) => dayKey(d));
+  const [sel, setSel] = useState<string[]>(() => (exportKeys.includes(currentKey) ? [currentKey] : exportKeys));
+  const [exportTitle, setExportTitle] = useState<string | null>(null);
+  const effTitle = exportTitle !== null && exportTitle.trim() ? exportTitle : defaultExportTitle(sel);
+  const toggleSel = (k: string) => setSel((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+  const currentInList = exportKeys.includes(currentKey);
+
   return (
     <div
       className={'sheet-backdrop' + (closing ? ' closing' : '')}
@@ -1239,6 +1093,22 @@ function SettingsModal({
                 <span className="sheet-dot" style={{ background: currentDot }} />
                 <span>重点色</span>
                 <span className="sheet-value">{currentName}</span>
+                <ChevronRightIcon size={18} className="sheet-chev" />
+              </button>
+            </div>
+            <div className="sheet-card">
+              <button type="button" className="sheet-row" onClick={() => setView('import')} aria-label="导入">
+                <span className="sheet-icon">
+                  <DownloadIcon size={20} />
+                </span>
+                <span>导入</span>
+                <ChevronRightIcon size={18} className="sheet-chev" />
+              </button>
+              <button type="button" className="sheet-row" onClick={() => setView('export')} aria-label="导出">
+                <span className="sheet-icon">
+                  <ShareIcon size={20} />
+                </span>
+                <span>导出</span>
                 <ChevronRightIcon size={18} className="sheet-chev" />
               </button>
             </div>
@@ -1312,8 +1182,117 @@ function SettingsModal({
             <p className="sheet-foot">点色块立即应用；返回后在“自定义...”能看到它。</p>
           </>
         )}
+        {view === 'import' && (
+          <>
+            <div className="sheet-head">
+              <button type="button" className="sheet-back" onClick={() => setView('main')} aria-label="返回">
+                <ChevronLeftIcon size={20} />
+              </button>
+              <div className="sheet-title">导入</div>
+            </div>
+            <p className="sheet-foot" style={{ margin: '0 4px 16px' }}>
+              单向导入：只支持订阅链接，日历只读，不回写。按日历事件 UID 匹配已有事项，勾选状态原样保留；备注里的条例会自动拆成可勾选明细。
+            </p>
+            <form onSubmit={handleImport}>
+              <div className="sheet-field">
+                <label htmlFor="import-url">填写 .ics 订阅链接</label>
+                <input
+                  id="import-url"
+                  type="url"
+                  className="field"
+                  placeholder="https://…/calendar.ics"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                />
+                <small style={{ color: 'var(--muted)', marginTop: 4, display: 'block' }}>
+                  支持 iOS 日历分享的 webcal:// 链接，会自动按 https 拉取。
+                </small>
+              </div>
+              {importErr && <div style={{ color: 'var(--red)', fontSize: 13 }}>{importErr}</div>}
+              {importResult && (
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  导入完成：新增 {importResult.added} · 更新 {importResult.updated} · 未变 {importResult.unchanged} · 跳过 {importSkippedTotal}
+                  {importSkippedTotal > 0 && (
+                    <>（重复 {importResult.skipped.recurring} / 已取消 {importResult.skipped.cancelled} / 空闲 {importResult.skipped.transparent} / 无 UID {importResult.skipped.noUid} / 无效 {importResult.skipped.invalid}）</>
+                  )}
+                </div>
+              )}
+              <button type="submit" className="sheet-action" disabled={importing}>
+                {importing ? '正在导入…' : '开始导入'}
+              </button>
+            </form>
+          </>
+        )}
+        {view === 'export' && (
+          <>
+            <div className="sheet-head">
+              <button type="button" className="sheet-back" onClick={() => setView('main')} aria-label="返回">
+                <ChevronLeftIcon size={20} />
+              </button>
+              <div className="sheet-title">导出</div>
+            </div>
+            <p className="sheet-foot" style={{ margin: '0 4px 16px' }}>
+              默认只导出当前页；也可以全选或勾选部分日期，再生成长图。
+            </p>
+            <div className="sheet-field">
+              <label htmlFor="export-title">标题</label>
+              <input
+                id="export-title"
+                type="text"
+                className="field"
+                value={exportTitle ?? defaultExportTitle(sel)}
+                onChange={(e) => setExportTitle(e.target.value)}
+                placeholder={defaultExportTitle(sel)}
+              />
+            </div>
+            <div className="sheet-shortcuts">
+              <button type="button" className="btn sm" onClick={() => setSel(exportKeys)}>
+                全选
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => setSel(currentInList ? [currentKey] : [])}
+                disabled={!currentInList}
+              >
+                仅当前
+              </button>
+              <button type="button" className="btn sm quiet" onClick={() => setSel([])}>
+                全不选
+              </button>
+            </div>
+            <div className="sheet-card">
+              <div className="export-days">
+                {days.map((d) => {
+                  const k = dayKey(d);
+                  const dt = d.date ? parseDateKey(d.date) : null;
+                  const label = dt ? `${dt.getMonth() + 1}月${dt.getDate()}日 周${WEEKDAYS[dt.getDay()]}` : `第${d.day}天`;
+                  return (
+                    <label key={k} className="export-day">
+                      <input type="checkbox" checked={sel.includes(k)} onChange={() => toggleSel(k)} />
+                      <span>
+                        {label}
+                        {k === currentKey ? ' · 当前' : ''}
+                      </span>
+                      <small>{d.events.length} 个事项</small>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="sheet-action"
+              disabled={sel.length === 0 || exporting}
+              onClick={async () => {
+                if (await onExport(sel, effTitle)) close();
+              }}
+            >
+              {exporting ? '正在生成…' : `导出图片${sel.length ? `（${sel.length} 天）` : ''}`}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 }
-

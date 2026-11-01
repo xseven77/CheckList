@@ -599,25 +599,12 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
   transform: translateY(0);
 }
 
-.modal-backdrop {
-  position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .45);
-  backdrop-filter: blur(4px); display: grid; place-items: center;
-  padding: 16px;
-  animation: fade-in 0.2s ease;
-}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.modal-card {
-  background: var(--surface); width: 100%; max-width: 440px; border-radius: 18px;
-  border: 1px solid var(--line); box-shadow: 0 12px 40px rgb(0 0 0 / .16); padding: 22px 20px;
-}
-.modal-card h2 { margin: 0 0 8px; font: 700 22px/1.3 var(--display); color: var(--ink); }
-.modal-card p.sub { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); }
-.modal-form { display: grid; gap: 14px; }
-.modal-field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
 
 .preview {
   position: fixed; inset: 0; z-index: 30; overflow: auto; background: var(--bg);
@@ -834,8 +821,8 @@ main { overflow: hidden; }
   .carousel { transition: none !important; }
 }
 /* 导出选择：按日期勾选 */
-.export-days { display: flex; flex-direction: column; margin: 0 0 16px; max-height: 50vh; overflow-y: auto; }
-.export-day { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px solid #f0e3e2; font-size: 15px; cursor: pointer; }
+.export-days { display: flex; flex-direction: column; }
+.export-day { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 16px; cursor: pointer; }
 .export-day input { width: 18px; height: 18px; accent-color: var(--red); }
 .export-day small { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
 
@@ -846,17 +833,17 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 /* 设置 popup：底部滑出的 sheet，带进出动画 */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .4); animation: fade-in .25s ease; }
 .sheet-backdrop.closing { animation: fade-out .25s ease forwards; }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-height: 92vh; overflow-y: auto; background: var(--bg); border-radius: 28px 28px 0 0; padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px)); animation: sheet-up .35s cubic-bezier(.32,.72,0,1); }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; height: 80vh; box-sizing: border-box; overflow-y: auto; background: var(--bg); border-radius: 28px 28px 0 0; padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px)); animation: sheet-up .35s cubic-bezier(.32,.72,0,1); }
 .sheet.closing { animation: sheet-down .28s ease forwards; }
 @keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 .sheet-head { display: flex; align-items: center; gap: 12px; padding: 16px 0 20px; }
 .sheet-close, .sheet-back { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-content: center; color: var(--ink); cursor: pointer; flex: none; }
-.sheet-title { flex: 1; font: 700 30px/1.2 var(--display); color: var(--ink); }
+.sheet-title { flex: 1; font: 800 34px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; color: var(--ink); }
 .sheet-card { background: var(--surface); border-radius: 24px; overflow: hidden; }
 .sheet-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }
-.sheet-value { margin-left: auto; color: var(--muted); font-size: 16px; flex: none; }
+.sheet-value { flex: 1; text-align: right; color: var(--muted); font-size: 16px; }
 .sheet-chev { margin-left: auto; color: var(--muted); flex: none; }
 .sheet-row:last-child { border-bottom: none; }
 .sheet-dot { width: 16px; height: 16px; border-radius: 50%; display: grid; place-content: center; color: #fff; flex: none; }
@@ -868,3 +855,12 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 .picker-cell { aspect-ratio: 1; border: none; border-radius: 8px; display: grid; place-content: center; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .picker-cell.sel { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px rgba(0,0,0,.3); }
 .sheet-foot { font-size: 12.5px; color: var(--muted); margin: 12px 4px 0; }
+.sheet-card + .sheet-card { margin-top: 16px; }
+.sheet-icon { width: 24px; height: 24px; display: grid; place-content: center; color: var(--ink); flex: none; }
+.sheet-field { margin-bottom: 16px; }
+.sheet-field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.sheet-shortcuts { display: flex; gap: 8px; margin-bottom: 16px; }
+.sheet-action { width: 100%; margin-top: 20px; padding: 14px; border: none; border-radius: 14px; background: var(--red); color: var(--on-red); font-size: 17px; font-weight: 600; cursor: pointer; }
+.sheet-action:disabled { opacity: .5; cursor: default; }
+.export-day:last-child { border-bottom: none; }
+
