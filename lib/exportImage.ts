@@ -326,8 +326,12 @@ export function drawChecklist(doc: Checklist, accent?: { red: string; soft: stri
   y += 96;
 
   // ---------------- 5. Canvas 渲染生成 ----------------
-  // 动态选择缩放比例：确保在不超过 iOS Safari 16384px 限制的同时具备高清分辨率
-  const S = Math.min(2, Math.max(1.2, Math.floor((15000 / y) * 10) / 10));
+  // 动态选择缩放比例：高度与面积双重封顶，确保不超出浏览器 canvas 上限（高 16384px、面积约 32MP）。
+  // 再长也不裁切：比例不够就整体缩小，宁可字小一点也不能丢内容——所以下限不再锁 1.2，
+  // 否则内容一超过 13653px 高，高度就会冲破 16384px 被浏览器裁掉（超长导出裁切就是这么来的）。
+  const byHeight = 15000 / y;
+  const byArea = Math.sqrt(32000000 / (W * y));
+  const S = Math.max(0.1, Math.min(2, Math.floor(byHeight * 10) / 10, Math.floor(byArea * 10) / 10));
 
   const c = document.createElement('canvas');
   c.width = Math.ceil(W * S);
