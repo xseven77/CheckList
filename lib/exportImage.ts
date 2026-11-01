@@ -33,9 +33,10 @@ type Op =
   | { k: 'pill'; text: string; x: number; y: number; w: number; h: number; bg: string; color: string; border?: string }
   | { k: 'bar'; x: number; y: number; w: number; h: number; pct: number };
 
-/** 把整份清单画成一张高清长图，分行优雅展示所有事项与复选状态 */
-export function drawChecklist(doc: Checklist): Promise<Blob> {
+/** 把整份清单画成一张高清长图，分行优雅展示所有事项与复选状态；accent 不传则用默认红 */
+export function drawChecklist(doc: Checklist, accent?: { red: string; soft: string; border: string }): Promise<Blob> {
   const W = 1080;
+  const PAL = accent ? { ...P, red: accent.red, redSoft: accent.soft, redBorder: accent.border } : P;
   const meas = document.createElement('canvas').getContext('2d')!;
   const ops: Op[] = [];
   let y = 0;
@@ -139,9 +140,9 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
     y: statTextY - 3,
     w: pillW,
     h: 30,
-    bg: pct >= 100 ? P.okGreenBg : P.redSoft,
-    color: pct >= 100 ? P.okGreen : P.red,
-    border: pct >= 100 ? P.okGreenBorder : P.redBorder,
+    bg: pct >= 100 ? P.okGreenBg : PAL.redSoft,
+    color: pct >= 100 ? P.okGreen : PAL.red,
+    border: pct >= 100 ? P.okGreenBorder : PAL.redBorder,
   });
   y += 36;
 
@@ -182,8 +183,8 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
     const [dDone, dTotal] = dayStats[d.day] ?? [0, 0];
 
     // 左侧日期列
-    ops.push({ k: 't', s: String(d.day), x: L + 4, y: y - 2, font: `700 54px ${SERIF}`, color: P.red });
-    ops.push({ k: 't', s: '号', x: L + 4 + (d.day >= 10 ? 64 : 34), y: y + 22, font: `700 22px ${SERIF}`, color: P.red });
+    ops.push({ k: 't', s: String(d.day), x: L + 4, y: y - 2, font: `700 54px ${SERIF}`, color: PAL.red });
+    ops.push({ k: 't', s: '号', x: L + 4 + (d.day >= 10 ? 64 : 34), y: y + 22, font: `700 22px ${SERIF}`, color: PAL.red });
 
     // 日期进度小胶囊
     const dayPillText = `${dDone}/${dTotal}`;
@@ -196,9 +197,9 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       y: y + 66,
       w: dayPillW,
       h: 24,
-      bg: dTotal > 0 && dDone === dTotal ? P.okGreenBg : P.redSoft,
-      color: dTotal > 0 && dDone === dTotal ? P.okGreen : P.red,
-      border: dTotal > 0 && dDone === dTotal ? P.okGreenBorder : P.redBorder,
+      bg: dTotal > 0 && dDone === dTotal ? P.okGreenBg : PAL.redSoft,
+      color: dTotal > 0 && dDone === dTotal ? P.okGreen : PAL.red,
+      border: dTotal > 0 && dDone === dTotal ? P.okGreenBorder : PAL.redBorder,
     });
 
     // 右侧事件流
@@ -234,7 +235,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
           if (!g.items.length) continue;
           if (g.label) {
             y += 4;
-            ops.push({ k: 'box', x: CX + 34, y: y + 3, w: 4, h: 20, bg: P.red, r: 2 });
+            ops.push({ k: 'box', x: CX + 34, y: y + 3, w: 4, h: 20, bg: PAL.red, r: 2 });
             text(g.label, CX + 46, CW - 46, 21, P.gold, 600, SANS, 1.3);
             y += 8;
           }
@@ -276,9 +277,9 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
           y: secTop + 16,
           w: secPillW,
           h: 28,
-          bg: sTotal > 0 && sDone === sTotal ? P.okGreenBg : P.redSoft,
-          color: sTotal > 0 && sDone === sTotal ? P.okGreen : P.red,
-          border: sTotal > 0 && sDone === sTotal ? P.okGreenBorder : P.redBorder,
+          bg: sTotal > 0 && sDone === sTotal ? P.okGreenBg : PAL.redSoft,
+          color: sTotal > 0 && sDone === sTotal ? P.okGreen : PAL.red,
+          border: sTotal > 0 && sDone === sTotal ? P.okGreenBorder : PAL.redBorder,
         });
 
         // 卡片内部细分割线
@@ -299,9 +300,9 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
               y,
               w: tagW,
               h: 28,
-              bg: P.redSoft,
-              color: P.red,
-              border: P.redBorder,
+              bg: PAL.redSoft,
+              color: PAL.red,
+              border: PAL.redBorder,
             });
             y += 36;
           }
@@ -409,7 +410,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
         ctx.beginPath();
         ctx.arc(o.x + o.size / 2, o.y + o.size / 2, o.size / 2, 0, Math.PI * 2);
         if (o.checked) {
-          ctx.fillStyle = P.red;
+          ctx.fillStyle = PAL.red;
           ctx.fill();
           drawCheckmark(o.x, o.y, o.size, '#ffffff');
         } else if (o.indeterminate) {
@@ -437,7 +438,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       } else {
         roundPath(o.x, o.y, o.size, o.size, 4);
         if (o.checked) {
-          ctx.fillStyle = P.okGreen;
+          ctx.fillStyle = PAL.red;
           ctx.fill();
           drawCheckmark(o.x, o.y, o.size, '#ffffff');
         } else {
@@ -451,10 +452,10 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
     } else if (o.k === 'dot') {
       ctx.beginPath();
       ctx.arc(o.x, o.y, 9, 0, Math.PI * 2);
-      ctx.fillStyle = o.filled ? P.red : '#ffffff';
+      ctx.fillStyle = o.filled ? PAL.red : '#ffffff';
       ctx.fill();
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = P.red;
+      ctx.strokeStyle = PAL.red;
       ctx.stroke();
       if (o.filled) {
         ctx.beginPath();
@@ -472,7 +473,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       if (fillW > 0) {
         const fr = Math.min(o.h / 2, fillW / 2);
         roundPath(o.x, o.y, fillW, o.h, fr);
-        ctx.fillStyle = P.red;
+        ctx.fillStyle = PAL.red;
         ctx.fill();
       }
     } else if (o.k === 'pill' || o.k === 'tag') {
@@ -497,7 +498,7 @@ export function drawChecklist(doc: Checklist): Promise<Blob> {
       const size = 76;
       const r = 16;
       roundPath(o.x, o.y, size, size, r);
-      ctx.fillStyle = P.red;
+      ctx.fillStyle = PAL.red;
       ctx.fill();
 
       // 内层细框

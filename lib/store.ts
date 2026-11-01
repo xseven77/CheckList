@@ -2,21 +2,20 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import {
-  type AIAction,
   type Change,
   type ChangeInput,
   type Checklist,
+  type Day,
   type Event,
-  type Group,
   type Item,
-  type Section,
   eventGroups,
   findEvent,
   findEventByGroup,
   findGroup,
-  findGroupContainer,
-  findSection,
 } from './types';
+import type { IcsSkipped, ParsedCalendarEvent } from './ics';
+import { dayNumberOf, dedupeByUid, sortParsed, timeLabel, toChecklistEvent } from './calendarSync';
+import { parseNoteItems } from './noteItems';
 
 // 数据目录：state.json 是实时数据；第一次启动时从 seed.json 复制一份
 const DATA_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.DATA_DIR || path.join(process.cwd(), 'data'));
@@ -84,30 +83,6 @@ export function getChecklist(): Promise<Checklist> {
   return serial(readState);
 }
 
-export function setGroupItems(id: string, items: Item[]): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const group = findGroup(doc, id);
-    if (!group) throw new NotFoundError(id);
-    group.items = items;
-
-    // 联动：检查所属事项的所有小标题是否已全部勾选
-    const ev = findEventByGroup(doc, id);
-    let eventDone: { id: string; done: boolean } | undefined;
-    if (ev) {
-      const allItems = eventGroups(ev).flatMap((g) => g.items);
-      if (allItems.length > 0) {
-        const allDone = allItems.every((i) => i.done);
-        if (ev.done !== allDone) {
-          ev.done = allDone;
-          eventDone = { id: ev.id, done: allDone };
-        }
-      }
-    }
-
-    return commit(doc, { type: 'group', id, items, eventDone });
-  });
-}
 
 export function setTaskDone(id: string, done: boolean): Promise<Change> {
   return serial(async () => {
@@ -127,334 +102,162 @@ export function setTaskDone(id: string, done: boolean): Promise<Change> {
   });
 }
 
-export function updateEvent(id: string, updates: { time?: string; title?: string; note?: string }): Promise<Change> {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export type CalendarImportSummary = {
+  added: number;
+  updated: number;
+  unchanged: number;
+  skipped: IcsSkipped;
+};
+
+/**
+ * 日历导入（单向）：解析得到的日历事件合并进清单。
+ * - 按 calUid 匹配已有事项：只更新时间/标题/备注/地点，done 与明细原样保留；
+ * - 日期变了则把事项搬到对应日期下（空了的同步日期随之删除）；
+ * - 未匹配的建新事项；手工日期（无 date）永不被同步触碰。
+ * 提交走一次 doc 变更，SSE 会把整份新文档推给所有在线设备。
+ */
+export function importCalendarEvents(
+  parsed: ParsedCalendarEvent[],
+  skipped: IcsSkipped
+): Promise<{ summary: CalendarImportSummary; rev: number }> {
   return serial(async () => {
     const doc = await readState();
-    const ev = findEvent(doc, id);
-    if (!ev) throw new NotFoundError(id);
-    if (typeof updates.time === 'string') ev.time = updates.time.trim();
-    if (typeof updates.title === 'string' && updates.title.trim()) ev.title = updates.title.trim();
-    if (typeof updates.note === 'string') ev.note = updates.note.trim();
-    return commit(doc, { type: 'doc', doc });
-  });
-}
+    const summary: CalendarImportSummary = { added: 0, updated: 0, unchanged: 0, skipped };
 
-function refreshEventDone(ev: Event) {
-  const allItems = eventGroups(ev).flatMap((g) => g.items);
-  if (allItems.length > 0) {
-    ev.done = allItems.every((i) => i.done);
-  }
-}
-
-export function addEvent(
-  day: number,
-  data: { title: string; time?: string; note?: string }
-): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    let targetDay = doc.days.find((d) => d.day === day);
-    if (!targetDay) {
-      targetDay = { day, events: [] };
-      doc.days.push(targetDay);
-      doc.days.sort((a, b) => a.day - b.day);
-    }
-    const newEvent: Event = {
-      id: 'e' + day + '_' + Math.random().toString(36).slice(2, 7),
-      time: data.time?.trim() || '全天',
-      title: data.title.trim() || '新增事项',
-      note: data.note?.trim() || '',
-      done: false,
-      groups: [
-        {
-          id: 'g' + day + '_' + Math.random().toString(36).slice(2, 7),
-          label: '',
-          items: [],
-        },
-      ],
-      sections: [],
-    };
-    targetDay.events.push(newEvent);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function deleteEvent(id: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    let deleted = false;
+    const byUid = new Map<string, { ev: Event; day: Day }>();
     for (const d of doc.days) {
-      const idx = d.events.findIndex((e) => e.id === id);
-      if (idx !== -1) {
-        d.events.splice(idx, 1);
-        deleted = true;
-        break;
+      for (const ev of d.events) {
+        if (ev.calUid && !byUid.has(ev.calUid)) byUid.set(ev.calUid, { ev, day: d });
       }
     }
-    if (!deleted) throw new NotFoundError(id);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
 
-export function addSection(eventId: string, title: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const ev = findEvent(doc, eventId);
-    if (!ev) throw new NotFoundError(eventId);
-    const newSec: Section = {
-      id: 's_' + Math.random().toString(36).slice(2, 8),
-      title: title.trim() || '分类明细',
-      groups: [
-        {
-          id: 'g_' + Math.random().toString(36).slice(2, 8),
-          label: '准备事项',
-          items: [],
-        },
-      ],
-    };
-    ev.sections.push(newSec);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function updateSection(id: string, title: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const found = findSection(doc, id);
-    if (!found) throw new NotFoundError(id);
-    found.section.title = title.trim() || '分类明细';
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function deleteSection(id: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const found = findSection(doc, id);
-    if (!found) throw new NotFoundError(id);
-    found.event.sections = found.event.sections.filter((s) => s.id !== id);
-    refreshEventDone(found.event);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function addGroup(
-  parent: { eventId?: string; sectionId?: string },
-  label: string
-): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const newGroup: Group = {
-      id: 'g_' + Math.random().toString(36).slice(2, 8),
-      label: label.trim(),
-      items: [],
-    };
-    if (parent.sectionId) {
-      const found = findSection(doc, parent.sectionId);
-      if (!found) throw new NotFoundError(parent.sectionId);
-      found.section.groups.push(newGroup);
-    } else if (parent.eventId) {
-      const ev = findEvent(doc, parent.eventId);
-      if (!ev) throw new NotFoundError(parent.eventId);
-      ev.groups.push(newGroup);
-    } else {
-      throw new Error('缺少 parent 参数');
-    }
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function updateGroupLabel(id: string, label: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const group = findGroup(doc, id);
-    if (!group) throw new NotFoundError(id);
-    group.label = label.trim();
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function deleteGroup(id: string): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const container = findGroupContainer(doc, id);
-    if (!container) throw new NotFoundError(id);
-    if (container.section) {
-      container.section.groups = container.section.groups.filter((g) => g.id !== id);
-    } else {
-      container.event.groups = container.event.groups.filter((g) => g.id !== id);
-    }
-    refreshEventDone(container.event);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-export function deleteDay(day: number): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    const idx = doc.days.findIndex((d) => d.day === day);
-    if (idx === -1) throw new NotFoundError(String(day));
-    doc.days.splice(idx, 1);
-    return commit(doc, { type: 'doc', doc });
-  });
-}
-
-
-export function addDay(day: number, initialEvent?: { title?: string; time?: string }): Promise<Change> {
-  return serial(async () => {
-    const doc = await readState();
-    let targetDay = doc.days.find((d) => d.day === day);
-    const evTitle = initialEvent?.title?.trim() || '全天安排';
-    const evTime = initialEvent?.time?.trim() || '全天';
-    const newEvent: Event = {
-      id: 'e' + day + '_' + Math.random().toString(36).slice(2, 7),
-      time: evTime,
-      title: evTitle,
-      note: '',
-      done: false,
-      groups: [
-        {
-          id: 'g' + day + '_' + Math.random().toString(36).slice(2, 7),
-          label: '待办明细',
-          items: [],
-        },
-      ],
-      sections: [],
+    const findOrCreateDay = (date: string): Day => {
+      let target = doc.days.find((d) => d.date === date);
+      if (!target) {
+        target = { day: dayNumberOf(date), date, events: [] };
+        doc.days.push(target);
+      }
+      return target;
     };
 
-    if (targetDay) {
-      targetDay.events.push(newEvent);
-    } else {
-      targetDay = {
-        day,
-        events: [newEvent],
-      };
-      doc.days.push(targetDay);
-      doc.days.sort((a, b) => a.day - b.day);
+    for (const p of sortParsed(dedupeByUid(parsed))) {
+      const found = byUid.get(p.uid);
+      if (found) {
+        const { ev, day: oldDay } = found;
+        let changed = false;
+        const nextTime = timeLabel(p);
+        if (ev.time !== nextTime) {
+          ev.time = nextTime;
+          changed = true;
+        }
+        if (ev.title !== p.title) {
+          ev.title = p.title;
+          changed = true;
+        }
+        const { items: noteItems, rest: noteRest } = parseNoteItems(p.description);
+        if (ev.note !== noteRest) {
+          ev.note = noteRest;
+          changed = true;
+        }
+        if (noteItems.length > 0) {
+          // 按文本匹配旧明细，勾选态原样保留；新增条例默认未勾选
+          const oldDone = new Map<string, boolean>();
+          for (const g of ev.groups) {
+            for (const it of g.items) {
+              if (!oldDone.has(it.text)) oldDone.set(it.text, it.done);
+            }
+          }
+          const nextItems = noteItems.map((text, i) => ({ id: `n${i + 1}`, text, done: oldDone.get(text) ?? false }));
+          const oldTexts = ev.groups.flatMap((g) => g.items.map((it) => it.text));
+          const same = oldTexts.length === nextItems.length && oldTexts.every((t, i) => t === nextItems[i].text);
+          if (!same) {
+            const gid = ev.groups[0]?.id ?? `g_${ev.id}`;
+            ev.groups = [{ id: gid, label: '', items: nextItems }];
+            changed = true;
+          }
+        }
+        const nextLoc = p.location || undefined;
+        if (ev.location !== nextLoc) {
+          ev.location = nextLoc;
+          changed = true;
+        }
+        if (oldDay.date !== p.date) {
+          const idx = oldDay.events.findIndex((e) => e === ev);
+          if (idx !== -1) oldDay.events.splice(idx, 1);
+          if (oldDay.events.length === 0 && oldDay.date) {
+            doc.days = doc.days.filter((d) => d !== oldDay);
+          }
+          const targetDay = findOrCreateDay(p.date);
+          targetDay.events.push(ev);
+          found.day = targetDay;
+          changed = true;
+        }
+        if (changed) summary.updated += 1;
+        else summary.unchanged += 1;
+      } else {
+        findOrCreateDay(p.date).events.push(toChecklistEvent(p));
+        summary.added += 1;
+      }
     }
 
-    return commit(doc, { type: 'doc', doc });
+    // 手工日期在前保持原顺序，同步日期按 date 排；同步日期内事项按时间排（全天在前）
+    const legacy = doc.days.filter((d) => !d.date);
+    const dated = doc.days.filter((d) => d.date).sort((a, b) => (a.date as string) < (b.date as string) ? -1 : 1);
+    for (const d of dated) {
+      d.events.sort((a, b) => {
+        const ta = a.time === '全天' ? '' : a.time;
+        const tb = b.time === '全天' ? '' : b.time;
+        if (ta !== tb) return ta < tb ? -1 : 1;
+        return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
+      });
+    }
+    doc.days = [...legacy, ...dated];
+
+    const change = await commit(doc, { type: 'doc', doc });
+    return { summary, rev: change.rev };
   });
 }
 
-export function applyAIActions(actions: AIAction[], summary: string): Promise<{ doc: Checklist; summary: string }> {
+/** 切换组内某明细的勾选态（明细内容归日历所有，此处只改 done） */
+export function setItemDone(groupId: string, itemId: string, done: boolean): Promise<Change> {
   return serial(async () => {
     const doc = await readState();
-    let modified = false;
+    const group = findGroup(doc, groupId);
+    if (!group) throw new NotFoundError(groupId);
+    const item = group.items.find((i) => i.id === itemId);
+    if (!item) throw new NotFoundError(itemId);
+    item.done = done;
 
-    for (const action of actions) {
-      if (action.type === 'add_event') {
-        const day = action.day;
-        let targetDay = doc.days.find((d) => d.day === day);
-        if (!targetDay) {
-          targetDay = { day, events: [] };
-          doc.days.push(targetDay);
-          doc.days.sort((a, b) => a.day - b.day);
-        }
-
-        const items: Item[] = (action.items || [])
-          .map((t) => ({
-            id: 'i_' + Math.random().toString(36).slice(2, 8),
-            text: t.trim(),
-            done: false,
-          }))
-          .filter((i) => i.text.length > 0);
-
-        const newEvent: Event = {
-          id: 'e' + day + '_' + Math.random().toString(36).slice(2, 7),
-          time: action.time?.trim() || '全天',
-          title: action.title?.trim() || '新增日程',
-          note: action.note?.trim() || '',
-          done: false,
-          groups: [
-            {
-              id: 'g' + day + '_' + Math.random().toString(36).slice(2, 7),
-              label: action.groupLabel?.trim() || '待办明细',
-              items,
-            },
-          ],
-          sections: [],
-        };
-        targetDay.events.push(newEvent);
-        modified = true;
-      } else if (action.type === 'add_items') {
-        let targetEvent: Event | undefined;
-        if (action.day !== undefined) {
-          const d = doc.days.find((day) => day.day === action.day);
-          if (d) {
-            if (action.eventTitle) {
-              const q = action.eventTitle.trim().toLowerCase();
-              targetEvent = d.events.find((e) => e.title.toLowerCase().includes(q) || q.includes(e.title.toLowerCase()));
-            }
-            if (!targetEvent && d.events.length > 0) {
-              targetEvent = d.events[0];
-            }
-          }
-        }
-        if (!targetEvent && action.eventTitle) {
-          const q = action.eventTitle.trim().toLowerCase();
-          for (const d of doc.days) {
-            targetEvent = d.events.find((e) => e.title.toLowerCase().includes(q) || q.includes(e.title.toLowerCase()));
-            if (targetEvent) break;
-          }
-        }
-        if (!targetEvent && doc.days.length > 0) {
-          const lastDay = doc.days[doc.days.length - 1];
-          targetEvent = lastDay.events[lastDay.events.length - 1];
-        }
-
-        if (targetEvent) {
-          let targetGroup = targetEvent.groups[0];
-          if (!targetGroup) {
-            targetGroup = {
-              id: 'g_' + Math.random().toString(36).slice(2, 7),
-              label: action.groupLabel || '待办明细',
-              items: [],
-            };
-            targetEvent.groups.push(targetGroup);
-          }
-          for (const t of action.items) {
-            const trimmed = t.trim();
-            if (trimmed) {
-              targetGroup.items.push({
-                id: 'i_' + Math.random().toString(36).slice(2, 8),
-                text: trimmed,
-                done: false,
-              });
-            }
-          }
-          modified = true;
-        }
-      } else if (action.type === 'set_done') {
-        const query = action.target.trim().toLowerCase();
-        for (const d of doc.days) {
-          if (action.day !== undefined && d.day !== action.day) continue;
-          for (const ev of d.events) {
-            if (ev.title.toLowerCase().includes(query) || query.includes(ev.title.toLowerCase())) {
-              ev.done = action.done;
-              for (const g of eventGroups(ev)) {
-                for (const it of g.items) {
-                  it.done = action.done;
-                }
-              }
-              modified = true;
-            }
-            for (const g of eventGroups(ev)) {
-              for (const it of g.items) {
-                if (it.text.toLowerCase().includes(query) || query.includes(it.text.toLowerCase())) {
-                  it.done = action.done;
-                  modified = true;
-                }
-              }
-            }
-          }
+    // 联动：所属事项的所有明细是否已全部勾选
+    const ev = findEventByGroup(doc, groupId);
+    let eventDone: { id: string; done: boolean } | undefined;
+    if (ev) {
+      const allItems = eventGroups(ev).flatMap((g) => g.items);
+      if (allItems.length > 0) {
+        const allDone = allItems.every((i) => i.done);
+        if (ev.done !== allDone) {
+          ev.done = allDone;
+          eventDone = { id: ev.id, done: allDone };
         }
       }
     }
 
-    if (modified) {
-      commit(doc, { type: 'doc', doc });
-    }
-    return { doc, summary };
+    return commit(doc, { type: 'group', id: groupId, items: group.items, eventDone });
   });
 }
 

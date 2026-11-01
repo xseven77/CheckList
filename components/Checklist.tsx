@@ -2,15 +2,118 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { drawChecklist } from '@/lib/exportImage';
-import { type Change, type Checklist as Doc, type Event, type Group, type Item, type Section, LIMITS, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
-import VoiceModal from '@/components/VoiceModal';
-import { AlertIcon, CheckIcon, CrossIcon, EditPencilIcon, InfoIcon, MicIcon, PlusIcon, SparklesIcon, TrashIcon } from '@/components/Icons';
+import { type Change, type Checklist as Doc, type Day, type Event, type Group, type Item, type Section, eventGroups, findEventByGroup, findGroup } from '@/lib/types';
+import { AlertIcon, CheckIcon, CrossIcon, DownloadIcon, GearIcon, InfoIcon, ShareIcon } from '@/components/Icons';
 
 type SyncState = { s: 'wait' | 'ok' | 'err'; text: string };
-const SYNC_OK: SyncState = { s: 'ok', text: '已同步 · 打开这个页面的人看到同一份清单' };
+const SYNC_OK: SyncState = { s: 'ok', text: '已同步' };
 const OPEN_KEY = 'checklist-open-v1';
+const THEME_KEY = 'checklist-theme-v1';
+/** 重点色主题：accent 进 CSS --red，imgSoft/imgBorder 进导出长图 */
+type ThemeId = 'red' | 'pink' | 'orange' | 'green' | 'blue' | 'purple';
+const THEMES: Record<ThemeId, { name: string; accent: string; soft: string; imgSoft: string; imgBorder: string }> = {
+  red: { name: '红', accent: '#b0262f', soft: '#f8e5e5', imgSoft: '#fbf0ee', imgBorder: '#f2d5d2' },
+  pink: { name: '粉', accent: '#c2255c', soft: '#fdf0f3', imgSoft: '#fdf0f3', imgBorder: '#f3c2d0' },
+  orange: { name: '橙', accent: '#d9480f', soft: '#fff1e6', imgSoft: '#fff1e6', imgBorder: '#f5c9a8' },
+  green: { name: '绿', accent: '#2e7d32', soft: '#eaf6ed', imgSoft: '#eaf6ed', imgBorder: '#c3e8ca' },
+  blue: { name: '蓝', accent: '#1971c2', soft: '#e7f1fa', imgSoft: '#e7f1fa', imgBorder: '#b8d4f0' },
+  purple: { name: '紫', accent: '#7048e8', soft: '#f1eaff', imgSoft: '#f1eaff', imgBorder: '#d0c2f5' },
+};
 
-const newId = () => 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+/** 日期键：同步日期用完整日期，手工日期用几号（避免跨月同号冲突） */
+function dayKey(d: { day: number; date?: string }): string {
+  return d.date ?? String(d.day);
+}
+
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+const MONTH_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
+
+/** 本地日期 → yyyy-MM-dd（不用 toISOString，避免 UTC 偏移） */
+function toDateKey(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+function addDays(key: string, n: number): string {
+  const d = parseDateKey(key);
+  d.setDate(d.getDate() + n);
+  return toDateKey(d);
+}
+/** 所在周（周日开头）的 7 天 */
+function weekOf(key: string): string[] {
+  const d = parseDateKey(key);
+  const start = new Date(d);
+  start.setDate(d.getDate() - d.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const t = new Date(start);
+    t.setDate(start.getDate() + i);
+    return toDateKey(t);
+  });
+}
+/** 农历日：1→初一 … 10→初十，11→十一 … 20→二十，21→廿一 … 30→三十 */
+function lunarDayChar(n: number): string {
+  const digits = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  if (n >= 1 && n <= 9) return '初' + digits[n - 1];
+  if (n === 10) return '初十';
+  if (n >= 11 && n <= 19) return '十' + digits[n - 11];
+  if (n === 20) return '二十';
+  if (n >= 21 && n <= 29) return '廿' + digits[n - 21];
+  if (n === 30) return '三十';
+  return '';
+}
+const LUNAR_DAY_NAMES: Record<string, number> = {
+  初一: 1, 初二: 2, 初三: 3, 初四: 4, 初五: 5, 初六: 6, 初七: 7, 初八: 8, 初九: 9, 初十: 10,
+  十一: 11, 十二: 12, 十三: 13, 十四: 14, 十五: 15, 十六: 16, 十七: 17, 十八: 18, 十九: 19, 二十: 20,
+  廿一: 21, 廿二: 22, 廿三: 23, 廿四: 24, 廿五: 25, 廿六: 26, 廿七: 27, 廿八: 28, 廿九: 29,
+  二十一: 21, 二十二: 22, 二十三: 23, 二十四: 24, 二十五: 25, 二十六: 26, 二十七: 27, 二十八: 28, 二十九: 29,
+  三十: 30,
+};
+const LUNAR_MONTH_NAMES = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+/** 农历日文本 → 数字：阿拉伯数字与中文日名都接受（不同浏览器返回格式不同） */
+function parseLunarDay(s: string): number {
+  const t = s.trim().replace(/日$/, '');
+  const n = parseInt(t, 10);
+  if (n >= 1 && n <= 30) return n;
+  return LUNAR_DAY_NAMES[t] ?? 0;
+}
+/** 农历月文本 → 中文月名：中文月名直接用，数字月按农历映射（闰月原样保留） */
+function normalizeLunarMonth(s: string): string {
+  const t = s.trim();
+  if (!t) return '';
+  if (t.startsWith('闰')) return t;
+  const n = parseInt(t, 10);
+  if (n >= 1 && n <= 12) return LUNAR_MONTH_NAMES[n - 1];
+  return t.endsWith('月') ? t : '';
+}
+/** 农历信息：先确认浏览器确实在用中文历法（否则是公历回退，不能当农历显示）；取不到则返回 null，调用方隐藏农历行 */
+function lunarParts(d: Date): { yearName: string; month: string; day: number } | null {
+  try {
+    const dtf = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { year: 'numeric', month: 'long', day: 'numeric' });
+    if (dtf.resolvedOptions().calendar !== 'chinese') return null;
+    const parts = dtf.formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    const day = parseLunarDay(get('day'));
+    const month = normalizeLunarMonth(get('month'));
+    const yearName = get('yearName');
+    if (!month || !(day >= 1 && day <= 30)) return null;
+    return { yearName, month, day };
+  } catch {
+    return null;
+  }
+}
+function lunarDayLabel(d: Date): string {
+  const p = lunarParts(d);
+  return p ? lunarDayChar(p.day) : '';
+}
+function lunarFullLabel(d: Date): string {
+  const p = lunarParts(d);
+  if (!p) return '';
+  return p.yearName ? `${p.yearName}年${p.month}${lunarDayChar(p.day)}` : `${p.month}${lunarDayChar(p.day)}`;
+}
 
 function mapGroup(doc: Doc, gid: string, fn: (items: Item[]) => Item[]): Doc {
   const mg = (g: Group) => (g.id === gid ? { ...g, items: fn(g.items) } : g);
@@ -86,23 +189,18 @@ export default function Checklist({ initial }: { initial: Doc }) {
     docRef.current = next;
     setDoc(next);
   };
-  const [editing, setEditing] = useState(false);
   const [sync, setSync] = useState<SyncState>({ s: 'wait', text: '正在连接…' });
   const [writer] = useState(() => createWriter(setSync));
-  const [toast, setToast] = useState<{
-    text: string;
-    type?: 'success' | 'info' | 'warn' | 'err';
-    undo?: () => void;
-  } | null>(null);
+  const [toast, setToast] = useState<{ text: string; type?: 'success' | 'info' | 'warn' | 'err' } | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const showToast = useCallback(
-    (text: string, type: 'success' | 'info' | 'warn' | 'err' = 'info', undo?: () => void, duration = 2800) => {
+    (text: string, type: 'success' | 'info' | 'warn' | 'err' = 'info', duration = 2800) => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      setToast({ text, type, undo });
+      setToast({ text, type });
       toastTimerRef.current = setTimeout(() => {
         setToast(null);
-      }, undo ? 8000 : duration);
+      }, duration);
     },
     []
   );
@@ -110,42 +208,130 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [showAddDay, setShowAddDay] = useState(false);
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>('red');
 
-  const earliestDay = useMemo(() => {
-    const days = doc.days.map((d) => d.day);
-    return days.length ? Math.min(...days) : 3;
-  }, [doc.days]);
+  // ---------- 单日视图 ----------
+  const [selected, setSelected] = useState<string>(() => toDateKey(new Date()));
+  const todayKey = toDateKey(new Date());
+  const selectedDate = parseDateKey(selected);
+  const weekKeys = weekOf(selected);
 
-  const latestDay = useMemo(() => {
-    const days = doc.days.map((d) => d.day);
-    return days.length ? Math.max(...days) : 7;
-  }, [doc.days]);
+  // ---------- 轮播轨道：左右切换按轮播图实现 ----------
+  // 平时轨道只有三页（前一天 / 当天 / 后一天），旧页和新页在一条轨道上一起平移；
+  // 跨多天时临时展开起止之间的所有页，轨道一次滑过中间页。
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragX, setDragX] = useState<number | null>(null);
+  const [slideTo, setSlideTo] = useState<0 | 2 | null>(null);
+  const [jump, setJump] = useState<{ days: string[]; from: number; to: number; go: boolean } | null>(null);
+  const [animating, setAnimating] = useState(false);
 
-  const [addDayDefault, setAddDayDefault] = useState<number>(8);
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (animating || jump || slideTo !== null) return;
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const start = touchRef.current;
+    if (!start) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) > Math.abs(dy)) setDragX(dx);
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+      // 滑过阈值：轨道带过渡滑到相邻页，结束后再提交日期
+      setDragX(null);
+      setSlideTo(dx < 0 ? 2 : 0);
+      setAnimating(true);
+    } else if (dragX !== null && dragX !== 0) {
+      // 没滑过阈值：轨道弹回当前页
+      setDragX(null);
+      setAnimating(true);
+    } else {
+      setDragX(null);
+    }
+  };
+  /** 切到某天：相邻页轨道滑过去；跨多天轨道一次滑过中间页；跨 14 天以上直接跳（滑过整段没有意义） */
+  const goToDay = (key: string) => {
+    if (key === selected || animating || jump || slideTo !== null) return;
+    if (key === addDays(selected, 1)) {
+      setSlideTo(2);
+      setAnimating(true);
+    } else if (key === addDays(selected, -1)) {
+      setSlideTo(0);
+      setAnimating(true);
+    } else {
+      const lo = key < selected ? key : selected;
+      const hi = key < selected ? selected : key;
+      const days: string[] = [];
+      for (let k = lo; ; k = addDays(k, 1)) {
+        days.push(k);
+        if (k === hi) break;
+      }
+      if (days.length > 15) {
+        setSelected(key);
+        return;
+      }
+      setJump({ days, from: days.indexOf(selected), to: days.indexOf(key), go: false });
+    }
+  };
+  // 跳转轨道：先让起始页落位并强制重排，再开过渡滑向目标页（否则浏览器会跳过起始帧）
+  useEffect(() => {
+    if (!jump || jump.go) return;
+    void trackRef.current?.offsetWidth;
+    setJump({ ...jump, go: true });
+    setAnimating(true);
+  }, [jump]);
+  /** 轨道过渡结束：提交新日期，轨道回到以新日期为中心的三页（视觉上与过渡终点完全一致） */
+  const onTrackTransitionEnd = () => {
+    if (jump) {
+      const target = jump.days[jump.to];
+      setJump(null);
+      setAnimating(false);
+      setSelected(target);
+    } else if (slideTo !== null) {
+      const target = addDays(selected, slideTo === 2 ? 1 : -1);
+      setSlideTo(null);
+      setAnimating(false);
+      setSelected(target);
+    } else {
+      setAnimating(false);
+    }
+  };
 
   // ---------- 实时同步 ----------
-  useEffect(() => {
-    // 用服务器的整份数据，但保留本机还没保存完的修改
-    const refetch = async () => {
-      try {
-        const r = await fetch('/api/checklist', { cache: 'no-store' });
-        if (!r.ok) return;
-        let next = (await r.json()) as Doc;
-        for (const p of writer.paths()) {
-          const [kind, id] = p.split('/');
-          if (kind === 'groups') {
-            const local = findGroup(docRef.current, id);
-            if (local) next = mapGroup(next, id, () => local.items);
-          } else {
-            const local = docRef.current.days.flatMap((d) => d.events).find((e) => e.id === id);
-            if (local) next = mapEvent(next, id, local.done);
-          }
+  // 用服务器的整份数据，但保留本机还没保存完的修改
+  const refetch = useCallback(async () => {
+    try {
+      const r = await fetch('/api/checklist', { cache: 'no-store' });
+      if (!r.ok) return;
+      let next = (await r.json()) as Doc;
+      for (const p of writer.paths()) {
+        const [kind, id] = p.split('/');
+        if (kind === 'groups') {
+          const local = findGroup(docRef.current, id);
+          if (local) next = mapGroup(next, id, () => local.items);
+        } else {
+          const local = docRef.current.days.flatMap((d) => d.events).find((e) => e.id === id);
+          if (local) next = mapEvent(next, id, local.done);
         }
-        commit(next);
-      } catch {}
-    };
+      }
+      commit(next);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writer]);
+
+  useEffect(() => {
     const es = new EventSource('/api/stream');
     es.onopen = () => {
       setSync(SYNC_OK);
@@ -180,13 +366,30 @@ export default function Checklist({ initial }: { initial: Doc }) {
       }
     };
     return () => es.close();
-  }, [writer]);
+  }, [writer, refetch]);
 
   useEffect(() => {
     try {
       setOpen(JSON.parse(localStorage.getItem(OPEN_KEY) || '{}'));
     } catch {}
   }, []);
+  // 主题色：只存在这台设备（不进服务器数据，换设备互不影响）
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      if (t === 'pink' || t === 'orange' || t === 'green' || t === 'blue' || t === 'purple') {
+        setTheme(t);
+        document.documentElement.setAttribute('data-theme', t);
+      }
+    } catch {}
+  }, []);
+  const applyTheme = (t: ThemeId) => {
+    setTheme(t);
+    document.documentElement.setAttribute('data-theme', t);
+    try {
+      localStorage.setItem(THEME_KEY, t);
+    } catch {}
+  };
   const toggleSection = (id: string, value: boolean) => {
     setOpen((o) => {
       const next = { ...o, [id]: value };
@@ -197,164 +400,17 @@ export default function Checklist({ initial }: { initial: Doc }) {
     });
   };
 
-  // ---------- 日期拓展 ----------
-  const handleAddDay = async (day: number, title?: string, time?: string) => {
-    const res = await fetch('/api/days', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ day, title, time }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || '添加失败');
-    }
-    const data = await res.json();
-    if (data.doc) {
-      commit(data.doc);
-    }
-    showToast(`已成功新增 ${day} 号日程！`, 'success');
-    setShowAddDay(false);
-    setTimeout(() => {
-      const el = document.getElementById(`day-${day}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+  // ---------- 打勾 ----------
+  const toggleTask = (eid: string, done: boolean) => {
+    // 联动检查：勾选大标题，同步将对应所有小标题都勾上或取消
+    const next = mapEventCascade(docRef.current, eid, done);
+    commit(next);
+    writer.send('tasks/' + eid, { done });
+    showToast(done ? '已完成该事项及所属全部明细' : '已取消勾选事项', 'info');
   };
 
-  // ---------- AI 语音配置转换 ----------
-  const handleApplyAI = async (text: string) => {
-    const res = await fetch('/api/ai/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'AI 解析失败');
-    }
-    const data = await res.json();
-    if (data.doc) {
-      commit(data.doc);
-    }
-    return data;
-  };
-
-  // ---------- 编辑事项标题与时间小标题 ----------
-  const handleUpdateEvent = async (eid: string, updates: { time?: string; title?: string }) => {
-    try {
-      const res = await fetch('/api/tasks/' + eid, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!res.ok) {
-        showToast('修改失败，请重试', 'err');
-        return;
-      }
-      const data = await res.json();
-      if (data.doc) commit(data.doc);
-      else {
-        commit({
-          ...docRef.current,
-          days: docRef.current.days.map((d) => ({
-            ...d,
-            events: d.events.map((ev) => (ev.id === eid ? { ...ev, ...updates } : ev)),
-          })),
-        });
-      }
-      if (updates.time) showToast(`已将时间修改为“${updates.time}”`, 'success');
-      if (updates.title) showToast(`已将标题修改为“${updates.title}”`, 'success');
-    } catch {
-      showToast('网络异常，修改未保存', 'err');
-    }
-  };
-
-  // ---------- 全层级节点管理 (增删改查) ----------
-  const mutateNode = useCallback(
-    async (payload: { action: string; [key: string]: unknown }) => {
-      try {
-        const res = await fetch('/api/nodes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          showToast(err.error || '操作失败，请重试', 'err');
-          return false;
-        }
-        const data = await res.json();
-        if (data.doc) commit(data.doc);
-        return true;
-      } catch {
-        showToast('网络异常，操作未保存', 'err');
-        return false;
-      }
-    },
-    [showToast]
-  );
-
-  const handleAddEvent = async (day: number, title: string, time?: string) => {
-    const ok = await mutateNode({ action: 'add_event', day, title, time });
-    if (ok) showToast(`已新增事项「${title}」`, 'success');
-    return ok;
-  };
-
-  const handleDeleteEvent = async (id: string, title: string) => {
-    const ok = await mutateNode({ action: 'delete_event', id });
-    if (ok) showToast(`已删除事项「${title}」`, 'info');
-    return ok;
-  };
-
-  const handleAddSection = async (eventId: string, title: string) => {
-    const ok = await mutateNode({ action: 'add_section', eventId, title });
-    if (ok) showToast(`已增加分类卡片「${title}」`, 'success');
-    return ok;
-  };
-
-  const handleUpdateSection = async (id: string, title: string) => {
-    const ok = await mutateNode({ action: 'update_section', id, title });
-    if (ok) showToast(`已将分类修改为“${title}”`, 'success');
-    return ok;
-  };
-
-  const handleDeleteSection = async (id: string, title: string) => {
-    const ok = await mutateNode({ action: 'delete_section', id });
-    if (ok) showToast(`已删除分类卡片「${title}」`, 'info');
-    return ok;
-  };
-
-  const handleAddGroup = async (parent: { eventId?: string; sectionId?: string }, label: string) => {
-    const ok = await mutateNode({ action: 'add_group', ...parent, label });
-    if (ok) showToast(`已增加分组「${label}」`, 'success');
-    return ok;
-  };
-
-  const handleUpdateGroupLabel = async (id: string, label: string) => {
-    const ok = await mutateNode({ action: 'update_group_label', id, label });
-    if (ok) showToast(`已修改分组为“${label}”`, 'success');
-    return ok;
-  };
-
-  const handleDeleteGroup = async (id: string, label: string) => {
-    const ok = await mutateNode({ action: 'delete_group', id });
-    if (ok) showToast(`已删除分组「${label || '待办分组'}」`, 'info');
-    return ok;
-  };
-
-  const handleDeleteDay = async (day: number) => {
-    const ok = await mutateNode({ action: 'delete_day', day });
-    if (ok) showToast(`已删除 ${day} 号日程`, 'info');
-    return ok;
-  };
-
-  const [confirmDeleteDay, setConfirmDeleteDay] = useState<number | null>(null);
-  const [addingEventDay, setAddingEventDay] = useState<number | null>(null);
-  const [draftEventTime, setDraftEventTime] = useState('');
-  const [draftEventTitle, setDraftEventTitle] = useState('');
-
-  // ---------- 修改 ----------
-  const updateGroup = (gid: string, fn: (items: Item[]) => Item[]) => {
-    let next = mapGroup(docRef.current, gid, fn);
+  const toggleItem = (gid: string, itemId: string, done: boolean) => {
+    let next = mapGroup(docRef.current, gid, (items) => items.map((i) => (i.id === itemId ? { ...i, done } : i)));
     // 联动检查：所属大标题的所有小标题是否已全部勾选
     const ev = findEventByGroup(next, gid);
     if (ev) {
@@ -367,42 +423,16 @@ export default function Checklist({ initial }: { initial: Doc }) {
       }
     }
     commit(next);
-    writer.send('groups/' + gid, { items: findGroup(next, gid)!.items });
-  };
-  const toggleTask = (eid: string, done: boolean) => {
-    // 联动检查：勾选大标题，同步将对应所有小标题都勾上或取消
-    const next = mapEventCascade(docRef.current, eid, done);
-    commit(next);
-    writer.send('tasks/' + eid, { done });
-    showToast(done ? '已完成该事项及所属全部明细' : '已取消勾选事项', 'info');
-  };
-  const deleteItem = (gid: string, item: Item) => {
-    const index = findGroup(docRef.current, gid)?.items.findIndex((i) => i.id === item.id) ?? -1;
-    if (index < 0) return;
-    updateGroup(gid, (items) => items.filter((i) => i.id !== item.id));
-    showToast(
-      `已删除“${item.text}”`,
-      'info',
-      () => {
-        updateGroup(gid, (items) => {
-          if (items.some((i) => i.id === item.id)) return items;
-          const copy = items.slice();
-          copy.splice(Math.min(index, copy.length), 0, item);
-          return copy;
-        });
-        showToast(`已恢复“${item.text}”`, 'success');
-      },
-      8000
-    );
+    writer.send('groups/' + gid, { itemId, done });
   };
 
   // ---------- 进度 ----------
   const counts = useMemo(() => {
     let ti = 0, td = 0, ii = 0, id = 0;
-    const perDay: Record<number, [number, number]> = {};
+    const perDay: Record<string, [number, number]> = {};
     const perSec: Record<string, [number, number]> = {};
     for (const d of doc.days) {
-      const pd = (perDay[d.day] = [0, 0]);
+      const pd = (perDay[dayKey(d)] = [0, 0]);
       for (const ev of d.events) {
         ti++;
         pd[1]++;
@@ -430,18 +460,25 @@ export default function Checklist({ initial }: { initial: Doc }) {
   }, [doc]);
 
   // ---------- 导出长图 ----------
-  const doExport = async () => {
+  const [showExport, setShowExport] = useState(false);
+  /** 按勾选的日期导出长图；返回是否成功（成功后由调用方关闭选择框） */
+  const doExport = async (dayKeys: string[]): Promise<boolean> => {
     setExporting(true);
-    showToast('正在生成长图…', 'info', undefined, 1500);
+    showToast('正在生成长图…', 'info', 1500);
     try {
-      const blob = await drawChecklist(docRef.current);
+      const full = docRef.current;
+      const filtered: Doc = { ...full, days: full.days.filter((d) => dayKeys.includes(dayKey(d))) };
+      const t = THEMES[theme];
+      const blob = await drawChecklist(filtered, { red: t.accent, soft: t.imgSoft, border: t.imgBorder });
       setPreview(URL.createObjectURL(blob));
       showToast('长图已生成并开启预览', 'success');
+      return true;
     } catch (e) {
       showToast(
         e instanceof Error && e.message === 'too-long' ? '清单太长，删掉一些明细后再导出' : '长图生成失败，请再试一次',
         'err'
       );
+      return false;
     } finally {
       setExporting(false);
     }
@@ -463,232 +500,144 @@ export default function Checklist({ initial }: { initial: Doc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview]);
 
-  const nodeProps = {
-    editing,
-    onUpdate: updateGroup,
-    onDelete: deleteItem,
-    onUpdateEvent: handleUpdateEvent,
-    onDeleteEvent: handleDeleteEvent,
-    onAddSection: handleAddSection,
-    onUpdateSection: handleUpdateSection,
-    onDeleteSection: handleDeleteSection,
-    onAddGroup: handleAddGroup,
-    onUpdateGroupLabel: handleUpdateGroupLabel,
-    onDeleteGroup: handleDeleteGroup,
-    showToast,
+  /** 轨道里某一页：有事项就列出来，没有就显示空态 */
+  const renderDay = (key: string) => {
+    const day = doc.days.find((d) => d.date === key);
+    if (!day) {
+      return (
+        <div className="empty">
+          <p>这一天没有事项</p>
+          <p className="sub">左右滑动切换日期，或点上方周视图选一天</p>
+        </div>
+      );
+    }
+    return (
+      <section className="day single" id={'day-' + key} aria-label={key}>
+        <div className="events">
+          {day.events.map((ev) => (
+            <EventBlock
+              key={ev.id}
+              ev={ev}
+              onTask={toggleTask}
+              onToggleItem={toggleItem}
+              open={open}
+              onSection={toggleSection}
+              perSec={counts.perSec}
+            />
+          ))}
+        </div>
+      </section>
+    );
   };
-
 
   return (
     <>
-      <div className="wrap">
-        <header className="top">
-          <div className="seal" aria-hidden="true">囍</div>
-          <div>
-            <h1>{doc.title}</h1>
-            <p className="lede">{doc.subtitle}</p>
+      <div className="wrap" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        <header className="cal-top">
+          <div className="cal-nav">
+            <div className="pill">
+              <button type="button" className="pill-btn" aria-label="上一周" onClick={() => goToDay(addDays(selected, -7))}>
+                ‹
+              </button>
+              <span className="pill-month">{MONTH_CN[selectedDate.getMonth()]}月</span>
+              <button type="button" className="pill-btn" aria-label="下一周" onClick={() => goToDay(addDays(selected, 7))}>
+                ›
+              </button>
+            </div>
+            <div className="pill">
+              <button type="button" className="pill-btn" title="从日历导入" onClick={() => setShowImport(true)}>
+                <DownloadIcon />
+              </button>
+              <button type="button" className="pill-btn" title="导出长图" onClick={() => setShowExport(true)} disabled={exporting}>
+                <ShareIcon />
+              </button>
+              <button type="button" className="pill-btn" title="设置" onClick={() => setShowSettings(true)}>
+                <GearIcon />
+              </button>
+            </div>
+          </div>
+
+          <div className="week-strip">
+            {weekKeys.map((key) => {
+              const dt = parseDateKey(key);
+              const isSel = key === selected;
+              const isToday = key === todayKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={'wday' + (isSel ? ' sel' : '') + (isToday && !isSel ? ' today' : '')}
+                  onClick={() => goToDay(key)}
+                  aria-label={`${dt.getMonth() + 1}月${dt.getDate()}日`}
+                >
+                  <span className="wd">{WEEKDAYS[dt.getDay()]}</span>
+                  <span className="wnum-wrap">
+                    <span className="wnum">{dt.getDate()}</span>
+                    <span className="wlun">{lunarDayLabel(dt)}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </header>
+
+        <div className="day-head">
+          <div className="day-title">
+            {selectedDate.getFullYear()}年{selectedDate.getMonth() + 1}月{selectedDate.getDate()}日 – 周{WEEKDAYS[selectedDate.getDay()]}
+          </div>
+          {(() => {
+            const full = lunarFullLabel(selectedDate);
+            return full ? <div className="day-lunar">{full}</div> : null;
+          })()}
+        </div>
 
         <div className="bar">
           <div className="prog">
             <div className="track">
               <div className="fill" style={{ width: counts.pct + '%' }} />
             </div>
-            <div className="prog-text">
-              <span>事项 <b>{counts.td}/{counts.ti}</b></span>
-              <span>明细 <b>{counts.id}/{counts.ii}</b></span>
+            <div className="prog-row">
+              <div className="prog-text">
+                <span>事项 <b>{counts.td}/{counts.ti}</b></span>
+                <span>明细 <b>{counts.id}/{counts.ii}</b></span>
+              </div>
+              <div className="sync" data-s={sync.s} role="status">{sync.text}</div>
             </div>
           </div>
-          <div className="actions">
-            <button
-              type="button"
-              className="btn primary"
-              aria-pressed={editing}
-              onClick={() => {
-                setEditing((v) => {
-                  const next = !v;
-                  showToast(next ? '已开启编辑模式（可增删改明细与小标题）' : '已退出编辑模式', 'info');
-                  return next;
-                });
-              }}
-            >
-              {editing ? '完成' : '编辑'}
-            </button>
-            <button type="button" className="btn" onClick={doExport} disabled={exporting}>
-              {exporting ? '正在生成…' : '导出长图'}
-            </button>
-          </div>
-          <div className="sync" data-s={sync.s} role="status">{sync.text}</div>
         </div>
 
-        {editing && <div className="edit-banner">编辑模式已开启：可对日期、事项、分类卡片、分组及明细全层级进行增删改查。完成后点击“完成”。</div>}
-
         <main>
-          {/* 顶部快捷往前新增一天日程 */}
-          <div className="add-day-top-wrap">
-            <button
-              type="button"
-              className="add-day-top-btn"
-              onClick={() => {
-                setAddDayDefault(Math.max(1, earliestDay - 1));
-                setShowAddDay(true);
-              }}
-            >
-              <PlusIcon size={13} />
-              <span>往前新增一天日程（如 {Math.max(1, earliestDay - 1)} 号）</span>
-            </button>
-          </div>
-
-          {doc.days.map((d) => (
-            <section className="day" id={'day-' + d.day} key={d.day} aria-label={`${d.day} 号`}>
-              <div className="date">
-                <div className="day-header">
-                  <div>
-                    {d.day}
-                    <span className="unit">号</span>
-                  </div>
-                  <small>{counts.perDay[d.day]?.[0] ?? 0}/{counts.perDay[d.day]?.[1] ?? 0}</small>
-                  {editing && (
-                    <button
-                      type="button"
-                      className="day-delete-btn"
-                      title={`删除 ${d.day} 号日程`}
-                      onClick={() => setConfirmDeleteDay(d.day)}
-                    >
-                      删除此日
-                    </button>
-                  )}
-                </div>
+          <div
+            ref={trackRef}
+            className="carousel"
+            style={{
+              transform: jump
+                ? `translateX(${-100 * (jump.go ? jump.to : jump.from)}%)`
+                : dragX !== null
+                  ? `translateX(calc(-100% + ${dragX}px))`
+                  : slideTo !== null
+                    ? `translateX(${-100 * slideTo}%)`
+                    : 'translateX(-100%)',
+              transition: animating
+                ? `transform ${jump ? Math.min(0.25 + 0.07 * Math.abs(jump.to - jump.from), 0.6) : 0.3}s ease`
+                : 'none',
+            }}
+            onTransitionEnd={onTrackTransitionEnd}
+          >
+            {(jump ? jump.days : [addDays(selected, -1), selected, addDays(selected, 1)]).map((key) => (
+              <div className="carousel-slide" key={key}>
+                {renderDay(key)}
               </div>
-
-              {confirmDeleteDay === d.day && (
-                <div className="confirm day-confirm">
-                  <p>确定删除 {d.day} 号日程及其全部事项与明细吗？</p>
-                  <button
-                    type="button"
-                    className="btn sm danger"
-                    onClick={async () => {
-                      await handleDeleteDay(d.day);
-                      setConfirmDeleteDay(null);
-                    }}
-                  >
-                    确认删除
-                  </button>
-                  <button type="button" className="btn sm" onClick={() => setConfirmDeleteDay(null)}>
-                    取消
-                  </button>
-                </div>
-              )}
-
-              <div className="events">
-                {d.events.map((ev) => (
-                  <EventBlock
-                    key={ev.id}
-                    ev={ev}
-                    onTask={toggleTask}
-                    open={open}
-                    onSection={toggleSection}
-                    perSec={counts.perSec}
-                    {...nodeProps}
-                  />
-                ))}
-
-                {editing && (
-                  <div className="add-event-wrap">
-                    {addingEventDay === d.day ? (
-                      <div className="add-event-form">
-                        <input
-                          type="text"
-                          className="field add-event-time"
-                          placeholder="时间（如：上午、15:00）"
-                          value={draftEventTime}
-                          maxLength={20}
-                          onChange={(e) => setDraftEventTime(e.target.value)}
-                        />
-                        <input
-                          type="text"
-                          className="field add-event-title"
-                          placeholder="事项标题（如：婚礼彩排、迎宾晚宴）"
-                          value={draftEventTitle}
-                          maxLength={40}
-                          autoFocus
-                          onChange={(e) => setDraftEventTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const t = draftEventTitle.trim();
-                              if (t) {
-                                handleAddEvent(d.day, t, draftEventTime);
-                                setAddingEventDay(null);
-                                setDraftEventTitle('');
-                                setDraftEventTime('');
-                              }
-                            }
-                            if (e.key === 'Escape') setAddingEventDay(null);
-                          }}
-                        />
-                        <div className="add-event-actions">
-                          <button
-                            type="button"
-                            className="btn sm primary"
-                            onClick={() => {
-                              const t = draftEventTitle.trim();
-                              if (t) {
-                                handleAddEvent(d.day, t, draftEventTime);
-                                setAddingEventDay(null);
-                                setDraftEventTitle('');
-                                setDraftEventTime('');
-                              }
-                            }}
-                          >
-                            添加事项
-                          </button>
-                          <button
-                            type="button"
-                            className="btn sm quiet"
-                            onClick={() => setAddingEventDay(null)}
-                          >
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="add-event-btn"
-                        onClick={() => {
-                          setAddingEventDay(d.day);
-                          setDraftEventTime('');
-                          setDraftEventTitle('');
-                        }}
-                      >
-                        <PlusIcon size={13} />
-                        <span>新增事项（在 {d.day} 号）</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-          ))}
-
-
-          {/* 底部往后新增一天日程 */}
-          <div className="add-day-wrap">
-            <button
-              type="button"
-              className="add-day-btn"
-              onClick={() => {
-                setAddDayDefault(latestDay + 1);
-                setShowAddDay(true);
-              }}
-            >
-              <PlusIcon size={14} />
-              <span>往后新增一天日程（如 {latestDay + 1} 号）</span>
-            </button>
+            ))}
           </div>
         </main>
       </div>
+
+      {selected !== todayKey && (
+        <button type="button" className="today-fab" onClick={() => goToDay(todayKey)}>
+          今天
+        </button>
+      )}
 
       {toast && (
         <div className={'toast ' + (toast.type || 'info')} role="status" aria-live="polite">
@@ -704,49 +653,32 @@ export default function Checklist({ initial }: { initial: Doc }) {
             )}
           </span>
           <span className="toast-text">{toast.text}</span>
-          {toast.undo && (
-            <button
-              type="button"
-              className="btn sm toast-undo-btn"
-              onClick={() => {
-                toast.undo?.();
-                setToast(null);
-              }}
-            >
-              撤销
-            </button>
-          )}
         </div>
       )}
 
-      {showAddDay && (
-        <AddDayModal
-          defaultDay={addDayDefault}
-          existingDays={doc.days.map((d) => d.day)}
-          onClose={() => setShowAddDay(false)}
-          onAdd={handleAddDay}
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onImported={refetch}
+          showToast={showToast}
         />
       )}
 
-      {/* 手机端/页面浮动 AI 助手按钮 */}
-      <button
-        type="button"
-        className="ai-voice-fab"
-        onClick={() => setShowVoiceModal(true)}
-        aria-label="打开 AI 语音口述助手"
-      >
-        <span className="ai-voice-fab-icon" aria-hidden="true">
-          <SparklesIcon size={18} />
-        </span>
-        <span>AI 语音口述</span>
-      </button>
+      {showExport && (
+        <ExportModal
+          days={doc.days}
+          currentKey={selected}
+          exporting={exporting}
+          onClose={() => setShowExport(false)}
+          onExport={async (keys) => {
+            if (await doExport(keys)) setShowExport(false);
+          }}
+        />
+      )}
 
-      <VoiceModal
-        isOpen={showVoiceModal}
-        onClose={() => setShowVoiceModal(false)}
-        onApplyAI={handleApplyAI}
-        showToast={showToast}
-      />
+      {showSettings && (
+        <SettingsModal theme={theme} onTheme={applyTheme} onClose={() => setShowSettings(false)} />
+      )}
 
       {preview && (
         <div className="preview" role="dialog" aria-modal="true" aria-label="长图预览">
@@ -770,215 +702,21 @@ export default function Checklist({ initial }: { initial: Doc }) {
   );
 }
 
-function AddDayModal({
-  defaultDay,
-  existingDays,
-  onClose,
-  onAdd,
-}: {
-  defaultDay: number;
-  existingDays: number[];
-  onClose: () => void;
-  onAdd: (day: number, title?: string, time?: string) => Promise<void>;
-}) {
-  const [day, setDay] = useState(defaultDay);
-  const [title, setTitle] = useState('');
-  const [time, setTime] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      setErr('请输入 1 到 31 之间的有效数字');
-      return;
-    }
-    setSubmitting(true);
-    setErr('');
-    try {
-      await onAdd(day, title, time);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '新增失败，请稍后重试';
-      setErr(msg);
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="新增日期日程">
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <h2>新增日期日程</h2>
-        <p className="sub">为清单增加新的日程（例如 8 号、9 号），自动实时同步给所有人。</p>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <div className="modal-field">
-            <label htmlFor="modal-day">几号 (1-31 日)</label>
-            <input
-              id="modal-day"
-              type="number"
-              min={1}
-              max={31}
-              className="field"
-              value={day}
-              onChange={(e) => setDay(parseInt(e.target.value, 10))}
-              required
-              autoFocus
-            />
-            {existingDays.includes(day) && (
-              <small style={{ color: 'var(--gold)', marginTop: 4, display: 'block' }}>
-                提示：当前清单已存在 {day} 号，提交将在该日期下新增一个事项段落。
-              </small>
-            )}
-          </div>
-          <div className="modal-field">
-            <label htmlFor="modal-title">主要事项标题（可选）</label>
-            <input
-              id="modal-title"
-              type="text"
-              className="field"
-              placeholder="如：全天安排、归还礼服、答谢宴"
-              value={title}
-              maxLength={40}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div className="modal-field">
-            <label htmlFor="modal-time">时间段（可选）</label>
-            <input
-              id="modal-time"
-              type="text"
-              className="field"
-              placeholder="如：全天、上午、10:00 出发"
-              value={time}
-              maxLength={20}
-              onChange={(e) => setTime(e.target.value)}
-            />
-          </div>
-          {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose} disabled={submitting}>
-              取消
-            </button>
-            <button type="submit" className="btn primary" disabled={submitting}>
-              {submitting ? '正在添加…' : '确认新增'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-type NodeProps = {
-  editing: boolean;
-  onUpdate: (gid: string, fn: (items: Item[]) => Item[]) => void;
-  onDelete: (gid: string, item: Item) => void;
-  onUpdateEvent: (eid: string, updates: { time?: string; title?: string }) => void;
-  onDeleteEvent: (eid: string, title: string) => void;
-  onAddSection: (eventId: string, title: string) => void;
-  onUpdateSection: (id: string, title: string) => void;
-  onDeleteSection: (id: string, title: string) => void;
-  onAddGroup: (parent: { eventId?: string; sectionId?: string }, label: string) => void;
-  onUpdateGroupLabel: (id: string, label: string) => void;
-  onDeleteGroup: (id: string, label: string) => void;
-  showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err', undo?: () => void, duration?: number) => void;
-};
-
 function EventBlock({
   ev,
   onTask,
+  onToggleItem,
   open,
   onSection,
   perSec,
-  onUpdateEvent,
-  onDeleteEvent,
-  onAddSection,
-  onUpdateSection,
-  onDeleteSection,
-  onAddGroup,
-  onUpdateGroupLabel,
-  onDeleteGroup,
-  showToast,
-  ...gp
-}: NodeProps & {
+}: {
   ev: Event;
   onTask: (eid: string, done: boolean) => void;
+  onToggleItem: (gid: string, itemId: string, done: boolean) => void;
   open: Record<string, boolean>;
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
 }) {
-  const [editingTime, setEditingTime] = useState(false);
-  const [draftTime, setDraftTime] = useState(ev.time);
-
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(ev.title);
-
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [addingSection, setAddingSection] = useState(false);
-  const [draftSectionTitle, setDraftSectionTitle] = useState('');
-
-  const [addingDirectGroup, setAddingDirectGroup] = useState(false);
-  const [draftDirectGroupLabel, setDraftDirectGroupLabel] = useState('');
-
-  useEffect(() => {
-    if (!gp.editing) {
-      setEditingTime(false);
-      setEditingTitle(false);
-      setConfirmDelete(false);
-      setAddingSection(false);
-      setAddingDirectGroup(false);
-    }
-  }, [gp.editing]);
-
-  useEffect(() => {
-    setDraftTime(ev.time);
-  }, [ev.time]);
-
-  useEffect(() => {
-    setDraftTitle(ev.title);
-  }, [ev.title]);
-
-  const saveTime = () => {
-    const t = draftTime.trim();
-    if (!t) return;
-    if (t !== ev.time) {
-      onUpdateEvent(ev.id, { time: t });
-    }
-    setEditingTime(false);
-  };
-
-  const saveTitle = () => {
-    const t = draftTitle.trim();
-    if (!t) return;
-    if (t !== ev.title) {
-      onUpdateEvent(ev.id, { title: t });
-    }
-    setEditingTitle(false);
-  };
-
-  const handleSaveSection = () => {
-    const t = draftSectionTitle.trim();
-    if (!t) return;
-    onAddSection(ev.id, t);
-    setDraftSectionTitle('');
-    setAddingSection(false);
-  };
-
-  const handleSaveDirectGroup = () => {
-    const l = draftDirectGroupLabel.trim();
-    if (!l) return;
-    onAddGroup({ eventId: ev.id }, l);
-    setDraftDirectGroupLabel('');
-    setAddingDirectGroup(false);
-  };
-
   const allItems = useMemo(() => eventGroups(ev).flatMap((g) => g.items), [ev]);
   const hasItems = allItems.length > 0;
   const doneCount = useMemo(() => allItems.filter((i) => i.done).length, [allItems]);
@@ -986,156 +724,40 @@ function EventBlock({
 
   return (
     <div className={'event' + (ev.done ? ' done' : '')}>
-      {/* 时间小标题行 */}
       <div className="time-row">
-        {editingTime ? (
-          <div className="time-editor">
-            <input
-              type="text"
-              className="field"
-              value={draftTime}
-              maxLength={20}
-              placeholder="如：上午、17:30 出发"
-              autoFocus
-              onChange={(e) => setDraftTime(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveTime();
-                if (e.key === 'Escape') setEditingTime(false);
-              }}
-            />
-            <button type="button" className="btn sm primary" onClick={saveTime}>
-              保存
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setEditingTime(false)}>
-              取消
-            </button>
-          </div>
-        ) : (
-          <span
-            className={'time' + (gp.editing ? ' editable' : '')}
-            title={gp.editing ? '点击修改小标题/时间' : undefined}
-            onClick={() => {
-              if (gp.editing) {
-                setDraftTime(ev.time);
-                setEditingTime(true);
-              }
-            }}
-          >
-            {ev.time || (gp.editing ? '设置时间' : '')}
-            {gp.editing && <EditPencilIcon size={12} className="edit-hint-icon" />}
-          </span>
-        )}
+        <span className="time">{ev.time}</span>
       </div>
 
-      {/* 大标题行 */}
       <div className="task-wrap">
-        {editingTitle ? (
-          <div className="task-editor">
-            <input
-              type="text"
-              className="field"
-              value={draftTitle}
-              maxLength={40}
-              autoFocus
-              onChange={(e) => setDraftTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveTitle();
-                if (e.key === 'Escape') setEditingTitle(false);
-              }}
-            />
-            <button type="button" className="btn sm primary" onClick={saveTitle}>
-              保存
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setEditingTitle(false)}>
-              取消
-            </button>
-          </div>
-        ) : (
-          <>
-            <label className="task">
-              <input
-                type="checkbox"
-                className="task-checkbox"
-                id={'task-' + ev.id}
-                checked={ev.done}
-                ref={(el) => {
-                  if (el) el.indeterminate = isPartial;
-                }}
-                onChange={() => {
-                  const nextDone = isPartial ? true : !ev.done;
-                  onTask(ev.id, nextDone);
-                }}
-              />
-              <span className="title">{ev.title}</span>
-            </label>
-            {gp.editing && (
-              <div className="ops">
-                <button
-                  type="button"
-                  className="btn sm quiet"
-                  onClick={() => {
-                    setDraftTitle(ev.title);
-                    setEditingTitle(true);
-                  }}
-                  title="修改标题"
-                >
-                  修改
-                </button>
-                <button
-                  type="button"
-                  className="btn sm quiet danger-hover"
-                  onClick={() => setConfirmDelete(true)}
-                  title="删除事项"
-                >
-                  删除
-                </button>
-              </div>
-            )}
-          </>
-        )}
+        <label className="task">
+          <input
+            type="checkbox"
+            className="task-checkbox"
+            id={'task-' + ev.id}
+            checked={ev.done}
+            ref={(el) => {
+              if (el) el.indeterminate = isPartial;
+            }}
+            onChange={() => {
+              const nextDone = isPartial ? true : !ev.done;
+              onTask(ev.id, nextDone);
+            }}
+          />
+          <span className="title">{ev.title}</span>
+        </label>
       </div>
 
-      {confirmDelete && (
-        <div className="confirm" style={{ margin: '8px 0' }}>
-          <p>确定删除事项「{ev.title}」及其下所有明细与分类卡片吗？</p>
-          <button
-            type="button"
-            className="btn sm danger"
-            onClick={() => onDeleteEvent(ev.id, ev.title)}
-          >
-            确认删除
-          </button>
-          <button type="button" className="btn sm" onClick={() => setConfirmDelete(false)}>
-            取消
-          </button>
-        </div>
-      )}
-
+      {ev.location && <p className="note">📍 {ev.location}</p>}
       {ev.note && <p className="note">{ev.note}</p>}
 
-      {/* 直属分组（若有） */}
       {ev.groups.length > 0 && (
         <div className="direct">
           {ev.groups.map((g) => (
-            <GroupBlock
-              key={g.id}
-              group={g}
-              onUpdateGroupLabel={onUpdateGroupLabel}
-              onDeleteGroup={onDeleteGroup}
-              showToast={showToast}
-              onUpdateEvent={onUpdateEvent}
-              onDeleteEvent={onDeleteEvent}
-              onAddSection={onAddSection}
-              onUpdateSection={onUpdateSection}
-              onDeleteSection={onDeleteSection}
-              onAddGroup={onAddGroup}
-              {...gp}
-            />
+            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} />
           ))}
         </div>
       )}
 
-      {/* 块级分类卡片 */}
       {ev.sections.map((s) => (
         <SectionBlock
           key={s.id}
@@ -1143,96 +765,9 @@ function EventBlock({
           counts={perSec[s.id] ?? [0, 0]}
           open={open[s.id] !== false}
           onToggle={(v) => onSection(s.id, v)}
-          onUpdateSection={onUpdateSection}
-          onDeleteSection={onDeleteSection}
-          onAddGroup={onAddGroup}
-          onUpdateGroupLabel={onUpdateGroupLabel}
-          onDeleteGroup={onDeleteGroup}
-          onUpdateEvent={onUpdateEvent}
-          onDeleteEvent={onDeleteEvent}
-          onAddSection={onAddSection}
-          showToast={showToast}
-          {...gp}
+          onToggleItem={onToggleItem}
         />
       ))}
-
-      {/* 事项底部操作：增加分类卡片或分组 */}
-      {gp.editing && (
-        <div className="event-bottom-ops">
-          {addingSection ? (
-            <div className="add-sub-form" style={{ width: '100%' }}>
-              <input
-                type="text"
-                className="field"
-                value={draftSectionTitle}
-                placeholder="分类卡片名称，如：新郎用品、现场物资"
-                maxLength={40}
-                autoFocus
-                onChange={(e) => setDraftSectionTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveSection();
-                  if (e.key === 'Escape') setAddingSection(false);
-                }}
-              />
-              <button type="button" className="btn sm primary" onClick={handleSaveSection}>
-                添加卡片
-              </button>
-              <button type="button" className="btn sm quiet" onClick={() => setAddingSection(false)}>
-                取消
-              </button>
-            </div>
-          ) : addingDirectGroup ? (
-            <div className="add-sub-form" style={{ width: '100%' }}>
-              <input
-                type="text"
-                className="field"
-                value={draftDirectGroupLabel}
-                placeholder="分组名称，如：待办事项、随身物品"
-                maxLength={30}
-                autoFocus
-                onChange={(e) => setDraftDirectGroupLabel(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveDirectGroup();
-                  if (e.key === 'Escape') setAddingDirectGroup(false);
-                }}
-              />
-              <button type="button" className="btn sm primary" onClick={handleSaveDirectGroup}>
-                添加分组
-              </button>
-              <button type="button" className="btn sm quiet" onClick={() => setAddingDirectGroup(false)}>
-                取消
-              </button>
-            </div>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="add-sub-btn"
-                onClick={() => {
-                  setDraftSectionTitle('');
-                  setAddingSection(true);
-                }}
-              >
-                <PlusIcon size={12} />
-                <span>增加分类卡片（如：新娘用品、现场物资）</span>
-              </button>
-              {ev.sections.length === 0 && (
-                <button
-                  type="button"
-                  className="add-sub-btn"
-                  onClick={() => {
-                    setDraftDirectGroupLabel('');
-                    setAddingDirectGroup(true);
-                  }}
-                >
-                  <PlusIcon size={12} />
-                  <span>增加分组</span>
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1242,54 +777,14 @@ function SectionBlock({
   counts,
   open,
   onToggle,
-  onUpdateSection,
-  onDeleteSection,
-  onAddGroup,
-  onUpdateGroupLabel,
-  onDeleteGroup,
-  showToast,
-  ...gp
-}: NodeProps & {
+  onToggleItem,
+}: {
   s: Section;
   counts: [number, number];
   open: boolean;
   onToggle: (open: boolean) => void;
+  onToggleItem: (gid: string, itemId: string, done: boolean) => void;
 }) {
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(s.title);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [addingGroup, setAddingGroup] = useState(false);
-  const [draftGroupLabel, setDraftGroupLabel] = useState('');
-
-  useEffect(() => {
-    if (!gp.editing) {
-      setEditingTitle(false);
-      setConfirmDelete(false);
-      setAddingGroup(false);
-    }
-  }, [gp.editing]);
-
-  useEffect(() => {
-    setDraftTitle(s.title);
-  }, [s.title]);
-
-  const saveTitle = () => {
-    const t = draftTitle.trim();
-    if (!t) return;
-    if (t !== s.title) {
-      onUpdateSection(s.id, t);
-    }
-    setEditingTitle(false);
-  };
-
-  const handleSaveGroup = () => {
-    const l = draftGroupLabel.trim();
-    if (!l) return;
-    onAddGroup({ sectionId: s.id }, l);
-    setDraftGroupLabel('');
-    setAddingGroup(false);
-  };
-
   const [a, b] = counts;
 
   return (
@@ -1302,136 +797,15 @@ function SectionBlock({
       }}
     >
       <summary>
-        {editingTitle ? (
-          <div className="sec-title-editor" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="text"
-              className="field"
-              value={draftTitle}
-              maxLength={40}
-              autoFocus
-              onChange={(e) => setDraftTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  saveTitle();
-                }
-                if (e.key === 'Escape') setEditingTitle(false);
-              }}
-            />
-            <button type="button" className="btn sm primary" onClick={saveTitle}>
-              保存
-            </button>
-            <button type="button" className="btn sm quiet" onClick={() => setEditingTitle(false)}>
-              取消
-            </button>
-          </div>
-        ) : (
-          <>
-            <span className="name">{s.title}</span>
-            <span className={'count' + (b > 0 && a === b ? ' full' : '')}>{a}/{b}</span>
-            {gp.editing && (
-              <div className="sec-ops" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  className="btn sm quiet"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDraftTitle(s.title);
-                    setEditingTitle(true);
-                  }}
-                  title="修改分类卡片名称"
-                >
-                  修改
-                </button>
-                <button
-                  type="button"
-                  className="btn sm quiet danger-hover"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setConfirmDelete(true);
-                  }}
-                  title="删除分类卡片"
-                >
-                  删除卡片
-                </button>
-              </div>
-            )}
-          </>
-        )}
+        <span className="name">{s.title}</span>
+        <span className={'count' + (b > 0 && a === b ? ' full' : '')}>{a}/{b}</span>
         <span className="chev" />
       </summary>
 
-      {confirmDelete && (
-        <div className="sec-confirm" onClick={(e) => e.stopPropagation()}>
-          <p>确定删除分类卡片「{s.title}」及其包含的所有分组与明细吗？</p>
-          <button
-            type="button"
-            className="btn sm danger"
-            onClick={() => onDeleteSection(s.id, s.title)}
-          >
-            确认删除
-          </button>
-          <button type="button" className="btn sm" onClick={() => setConfirmDelete(false)}>
-            取消
-          </button>
-        </div>
-      )}
-
       <div className="sec-body">
         {s.groups.map((g) => (
-          <GroupBlock
-            key={g.id}
-            group={g}
-            {...gp}
-            onUpdateGroupLabel={onUpdateGroupLabel}
-            onDeleteGroup={onDeleteGroup}
-            onAddGroup={onAddGroup}
-            onUpdateSection={onUpdateSection}
-            onDeleteSection={onDeleteSection}
-            showToast={showToast}
-          />
+          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} />
         ))}
-
-        {gp.editing && (
-          <div className="add-sub-block-wrap">
-            {addingGroup ? (
-              <div className="add-sub-form">
-                <input
-                  type="text"
-                  className="field"
-                  value={draftGroupLabel}
-                  placeholder="新分组名称，如：服装配饰、急救用品"
-                  maxLength={30}
-                  autoFocus
-                  onChange={(e) => setDraftGroupLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveGroup();
-                    if (e.key === 'Escape') setAddingGroup(false);
-                  }}
-                />
-                <button type="button" className="btn sm primary" onClick={handleSaveGroup}>
-                  添加分组
-                </button>
-                <button type="button" className="btn sm quiet" onClick={() => setAddingGroup(false)}>
-                  取消
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="add-sub-btn"
-                onClick={() => {
-                  setDraftGroupLabel('');
-                  setAddingGroup(true);
-                }}
-              >
-                <PlusIcon size={12} />
-                <span>在「{s.title}」中增加分组</span>
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </details>
   );
@@ -1439,112 +813,18 @@ function SectionBlock({
 
 function GroupBlock({
   group,
-  editing,
-  onUpdate,
-  onDelete,
-  onUpdateGroupLabel,
-  onDeleteGroup,
-  showToast,
-}: NodeProps & {
+  onToggleItem,
+}: {
   group: Group;
+  onToggleItem: (gid: string, itemId: string, done: boolean) => void;
 }) {
-  const [draft, setDraft] = useState('');
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [draftLabel, setDraftLabel] = useState(group.label);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!editing) {
-      setEditingLabel(false);
-      setConfirmDelete(false);
-    }
-  }, [editing]);
-
-  useEffect(() => {
-    setDraftLabel(group.label);
-  }, [group.label]);
-
-  const saveLabel = () => {
-    const l = draftLabel.trim();
-    if (!l) return;
-    if (l !== group.label) {
-      onUpdateGroupLabel(group.id, l);
-    }
-    setEditingLabel(false);
-  };
-
-  const placeholder = group.label ? `增加到「${group.label}」` : '增加一条明细';
-  if (!editing && !group.items.length) return null;
+  if (!group.items.length) return null;
 
   return (
     <div className="grp">
-      {editingLabel ? (
-        <div className="grp-label-editor">
-          <input
-            type="text"
-            className="field"
-            value={draftLabel}
-            placeholder="分组名称，如：个人准备"
-            maxLength={30}
-            autoFocus
-            onChange={(e) => setDraftLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveLabel();
-              if (e.key === 'Escape') setEditingLabel(false);
-            }}
-          />
-          <button type="button" className="btn sm primary" onClick={saveLabel}>
-            保存
-          </button>
-          <button type="button" className="btn sm quiet" onClick={() => setEditingLabel(false)}>
-            取消
-          </button>
-        </div>
-      ) : (
-        (group.label || editing) && (
-          <div className="grp-header">
-            <div className="grp-label">{group.label || (editing ? '（默认分组）' : '')}</div>
-            {editing && (
-              <div className="grp-ops">
-                <button
-                  type="button"
-                  className="btn sm quiet"
-                  onClick={() => {
-                    setDraftLabel(group.label);
-                    setEditingLabel(true);
-                  }}
-                  title="修改分组名称"
-                >
-                  修改
-                </button>
-                <button
-                  type="button"
-                  className="btn sm quiet danger-hover"
-                  onClick={() => setConfirmDelete(true)}
-                  title="删除此分组"
-                >
-                  删除
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      )}
-
-      {confirmDelete && (
-        <div className="confirm">
-          <p>确定删除分组「{group.label || '此分组'}」及其所属全部明细吗？</p>
-          <button
-            type="button"
-            className="btn sm danger"
-            onClick={() => onDeleteGroup(group.id, group.label)}
-          >
-            确认删除
-          </button>
-          <button type="button" className="btn sm" onClick={() => setConfirmDelete(false)}>
-            取消
-          </button>
+      {group.label && (
+        <div className="grp-header">
+          <div className="grp-label">{group.label}</div>
         </div>
       )}
 
@@ -1553,102 +833,21 @@ function GroupBlock({
           <ItemRow
             key={item.id}
             item={item}
-            editing={editing}
-            onToggle={(done) => {
-              onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, done } : i)));
-              showToast(done ? `已完成「${item.text}」` : `已取消勾选「${item.text}」`, 'info');
-            }}
-            onRename={(text) => {
-              onUpdate(group.id, (items) => items.map((i) => (i.id === item.id ? { ...i, text } : i)));
-              showToast(`已更新为“${text}”`, 'success');
-            }}
-            onDelete={() => onDelete(group.id, item)}
+            onToggle={(done) => onToggleItem(group.id, item.id, done)}
           />
         ))}
       </div>
-
-      {editing && (
-        <form
-          className="add"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const text = draft.trim();
-            if (!text) return inputRef.current?.focus();
-            if (group.items.length >= LIMITS.items) return;
-            onUpdate(group.id, (items) => [...items, { id: newId(), text, done: false }]);
-            showToast(`已增加明细「${text}」`, 'success');
-            setDraft('');
-            inputRef.current?.focus();
-          }}
-        >
-          <input
-            ref={inputRef}
-            className="field"
-            id={'add-' + group.id}
-            type="text"
-            maxLength={LIMITS.text}
-            enterKeyHint="done"
-            placeholder={placeholder}
-            aria-label={placeholder}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <button type="submit" className="btn sm">＋ 增加</button>
-        </form>
-      )}
     </div>
   );
 }
 
-
 function ItemRow({
-  item, editing, onToggle, onRename, onDelete,
+  item,
+  onToggle,
 }: {
   item: Item;
-  editing: boolean;
   onToggle: (done: boolean) => void;
-  onRename: (text: string) => void;
-  onDelete: () => void;
 }) {
-  const [mode, setMode] = useState<'idle' | 'edit' | 'confirm'>('idle');
-  const [draft, setDraft] = useState(item.text);
-  useEffect(() => {
-    if (!editing) setMode('idle');
-  }, [editing]);
-
-  if (editing && mode === 'edit') {
-    const save = () => {
-      const t = draft.trim();
-      if (!t) return;
-      if (t !== item.text) onRename(t);
-      setMode('idle');
-    };
-    return (
-      <div className="item">
-        <input
-          className="field editor"
-          id={'edit-' + item.id}
-          type="text"
-          value={draft}
-          maxLength={LIMITS.text}
-          enterKeyHint="done"
-          aria-label="修改明细内容"
-          autoFocus
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              save();
-            }
-            if (e.key === 'Escape') setMode('idle');
-          }}
-        />
-        <button type="button" className="btn sm primary" onClick={save}>保存</button>
-        <button type="button" className="btn sm quiet" onClick={() => setMode('idle')}>取消</button>
-      </div>
-    );
-  }
-
   return (
     <div className="item">
       <label>
@@ -1661,31 +860,236 @@ function ItemRow({
         />
         <span className="t">{item.text}</span>
       </label>
-      {editing && (
-        <div className="ops">
+    </div>
+  );
+}
+
+type ImportSummary = {
+  added: number;
+  updated: number;
+  unchanged: number;
+  skipped: { recurring: number; cancelled: number; transparent: number; noUid: number; invalid: number };
+};
+
+function ImportModal({
+  onClose,
+  onImported,
+  showToast,
+}: {
+  onClose: () => void;
+  onImported: () => Promise<void>;
+  showToast: (text: string, type?: 'success' | 'info' | 'warn' | 'err') => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState<ImportSummary | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setResult(null);
+    const body = url.trim() ? { url: url.trim() } : null;
+    if (!body) {
+      setErr('请填写 .ics 订阅链接');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/calendar/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error || '导入失败，请稍后重试');
+        return;
+      }
+      setResult(data.summary as ImportSummary);
+      showToast(`导入完成：新增 ${data.summary.added}，更新 ${data.summary.updated}`, 'success');
+      await onImported();
+    } catch {
+      setErr('网络异常，导入未完成');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const skippedTotal = result
+    ? result.skipped.recurring + result.skipped.cancelled + result.skipped.transparent + result.skipped.noUid + result.skipped.invalid
+    : 0;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="从日历导入">
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h2>从日历导入</h2>
+        <p className="sub">单向导入：只支持订阅链接，日历只读，不回写。按日历事件 UID 匹配已有事项，勾选状态原样保留；备注里的条例会自动拆成可勾选明细。</p>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          <div className="modal-field">
+            <label htmlFor="import-url">填写 .ics 订阅链接</label>
+            <input
+              id="import-url"
+              type="url"
+              className="field"
+              placeholder="https://…/calendar.ics"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+            <small style={{ color: 'var(--muted)', marginTop: 4, display: 'block' }}>支持 iOS 日历分享的 webcal:// 链接，会自动按 https 拉取。</small>
+          </div>
+          {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
+          {result && (
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+              导入完成：新增 {result.added} · 更新 {result.updated} · 未变 {result.unchanged} · 跳过 {skippedTotal}
+              {skippedTotal > 0 && (
+                <>（重复 {result.skipped.recurring} / 已取消 {result.skipped.cancelled} / 空闲 {result.skipped.transparent} / 无 UID {result.skipped.noUid} / 无效 {result.skipped.invalid}）</>
+              )}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={onClose} disabled={submitting}>
+              {result ? '完成' : '取消'}
+            </button>
+            <button type="submit" className="btn primary" disabled={submitting}>
+              {submitting ? '正在导入…' : '开始导入'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ExportModal({
+  days,
+  currentKey,
+  exporting,
+  onClose,
+  onExport,
+}: {
+  days: Day[];
+  currentKey: string;
+  exporting: boolean;
+  onClose: () => void;
+  onExport: (keys: string[]) => Promise<void>;
+}) {
+  const keys = days.map((d) => dayKey(d));
+  // 默认只勾当前页；当前页不在清单里时默认全选（避免打开就是空选）
+  const [sel, setSel] = useState<string[]>(() => (keys.includes(currentKey) ? [currentKey] : keys));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const toggle = (k: string) => setSel((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+  const currentInList = keys.includes(currentKey);
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="导出长图">
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h2>导出长图</h2>
+        <p className="sub">默认只导出当前页；也可以全选或勾选部分日期，再生成长图。</p>
+        <div className="modal-actions" style={{ justifyContent: 'flex-start', marginBottom: 10 }}>
+          <button type="button" className="btn sm" onClick={() => setSel(keys)}>
+            全选
+          </button>
           <button
             type="button"
-            className="btn sm quiet"
-            aria-label={`修改 ${item.text}`}
-            onClick={() => {
-              setDraft(item.text);
-              setMode('edit');
-            }}
+            className="btn sm"
+            onClick={() => setSel(currentInList ? [currentKey] : [])}
+            disabled={!currentInList}
           >
-            修改
+            仅当前
           </button>
-          <button type="button" className="btn sm quiet" aria-label={`删除 ${item.text}`} onClick={() => setMode('confirm')}>
-            删除
+          <button type="button" className="btn sm quiet" onClick={() => setSel([])}>
+            全不选
           </button>
         </div>
-      )}
-      {editing && mode === 'confirm' && (
-        <div className="confirm" role="group" aria-label="删除确认">
-          <p>确定删除“{item.text}”吗？</p>
-          <button type="button" className="btn sm danger" onClick={onDelete}>确认删除</button>
-          <button type="button" className="btn sm" onClick={() => setMode('idle')} autoFocus>取消</button>
+        <div className="export-days">
+          {days.map((d) => {
+            const k = dayKey(d);
+            const dt = d.date ? parseDateKey(d.date) : null;
+            const label = dt ? `${dt.getMonth() + 1}月${dt.getDate()}日 周${WEEKDAYS[dt.getDay()]}` : `第${d.day}天`;
+            return (
+              <label key={k} className="export-day">
+                <input type="checkbox" checked={sel.includes(k)} onChange={() => toggle(k)} />
+                <span>
+                  {label}
+                  {k === currentKey ? ' · 当前' : ''}
+                </span>
+                <small>{d.events.length} 个事项</small>
+              </label>
+            );
+          })}
         </div>
-      )}
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose} disabled={exporting}>
+            取消
+          </button>
+          <button type="button" className="btn primary" disabled={sel.length === 0 || exporting} onClick={() => onExport(sel)}>
+            {exporting ? '正在生成…' : `导出图片${sel.length ? `（${sel.length} 天）` : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsModal({
+  theme,
+  onTheme,
+  onClose,
+}: {
+  theme: ThemeId;
+  onTheme: (t: ThemeId) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label="设置">
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h2>设置</h2>
+        <p className="sub">选一个重点色，页面整体的色彩风格会跟着变；只保存在这台设备上，导出长图也会用同一个重点色。</p>
+        <div className="theme-grid">
+          {(Object.keys(THEMES) as ThemeId[]).map((id) => {
+            const t = THEMES[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                className={'theme-swatch' + (theme === id ? ' sel' : '')}
+                onClick={() => onTheme(id)}
+                aria-label={t.name}
+                title={t.name}
+              >
+                <span className="theme-dot" style={{ background: t.accent }} />
+                <span>{t.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn primary" onClick={onClose}>
+            完成
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
