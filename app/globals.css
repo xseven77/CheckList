@@ -857,7 +857,7 @@ input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-ca
 .sheet-card { background: var(--surface); border-radius: 24px; overflow: hidden; }
 .sheet-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; background: transparent; border: none; border-bottom: 1px solid var(--line); font-size: 17px; color: var(--ink); text-align: left; cursor: pointer; }
 .sheet-value { margin-left: auto; color: var(--muted); font-size: 16px; flex: none; }
-.sheet-chev { color: var(--muted); flex: none; }
+.sheet-chev { margin-left: auto; color: var(--muted); flex: none; }
 .sheet-row:last-child { border-bottom: none; }
 .sheet-dot { width: 16px; height: 16px; border-radius: 50%; display: grid; place-content: center; color: #fff; flex: none; }
 /* 自定义取色板 */
