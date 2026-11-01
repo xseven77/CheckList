@@ -135,7 +135,17 @@ function applyAppearance(m: Mode, themeValue: string) {
   setThemeVars(resolveTheme(themeValue), dark);
 }
 
-/** 日期键：同步日期用完整日期，手工日期用几号（避免跨月同号冲突） */
+/** 页面滚动锁：设置弹窗和长图预览都会锁 body，用计数避免两个锁互相盖掉对方的恢复值。
+ * 旧写法是各自“记下旧值、退出时恢复”：导出成功先关设置、后关预览时，预览退出会把 body 恢复成“设置还开着时的 hidden”，主页面就再也滚不动了。 */
+let scrollLockCount = 0;
+function lockScroll() {
+  if (scrollLockCount === 0) document.body.style.overflow = 'hidden';
+  scrollLockCount += 1;
+}
+function unlockScroll() {
+  scrollLockCount = Math.max(0, scrollLockCount - 1);
+  if (scrollLockCount === 0) document.body.style.overflow = '';
+}
 function dayKey(d: { day: number; date?: string }): string {
   return d.date ?? String(d.day);
 }
@@ -649,12 +659,11 @@ export default function Checklist({ initial }: { initial: Doc }) {
   };
   useEffect(() => {
     if (!preview) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closePreview();
     document.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlockScroll();
       document.removeEventListener('keydown', onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1165,10 +1174,9 @@ function SettingsModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [close]);
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     return () => {
-      document.body.style.overflow = prev;
+      unlockScroll();
     };
   }, []);
   const isCustom = /^#[0-9a-fA-F]{6}$/.test(theme);
