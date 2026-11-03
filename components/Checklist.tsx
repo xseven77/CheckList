@@ -1048,7 +1048,7 @@ function GroupBlock({
         <div className="grp-header">
           <CheckBox
             id={'grp-' + group.id}
-            className="item-checkbox"
+            className="task-checkbox"
             checked={allDone}
             indeterminate={partial}
             disabled={checkDisabled}

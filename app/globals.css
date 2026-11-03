@@ -454,8 +454,8 @@ h1 { font: 700 28px/1.25 var(--display); margin: 0; letter-spacing: .03em; text-
 .grp-label { font-size: 12.5px; letter-spacing: .08em; color: var(--muted); padding-top: 0; }
 /* 带名分组（日历备注小标题拆出来的组）：卡片样式，组名带勾选框 */
 .grp.grp-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px 8px; margin-top: 10px; }
-.grp.grp-card .grp-header { justify-content: flex-start; gap: 6px; margin-bottom: 2px; }
-.grp.grp-card .grp-label { font-size: 15px; font-weight: 700; letter-spacing: 0; color: var(--ink); }
+.grp.grp-card .grp-header { justify-content: flex-start; gap: 6px; margin-bottom: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.grp.grp-card .grp-label { font-size: 16px; font-weight: 700; letter-spacing: 0; color: var(--ink); }
 .items { display: grid; }
 .item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 44px; }
 .item label { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
