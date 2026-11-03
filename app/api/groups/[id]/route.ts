@@ -1,15 +1,19 @@
-import { NotFoundError, setItemDone } from '@/lib/store';
+import { NotFoundError, setGroupDone, setItemDone } from '@/lib/store';
 import { readJson } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
-/** 切换组内某明细的勾选态：{ itemId: string; done: boolean }（明细内容归日历所有，不可在此修改） */
+/** 切换组内某明细的勾选态：{ itemId: string; done: boolean }；
+ * 切换整组：{ done: boolean }（明细内容归日历所有，不可在此修改） */
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = await readJson(req);
   try {
     if (typeof body?.itemId === 'string' && typeof body?.done === 'boolean') {
       return Response.json(await setItemDone(id, body.itemId, body.done));
+    }
+    if (typeof body?.done === 'boolean') {
+      return Response.json(await setGroupDone(id, body.done));
     }
     return Response.json({ error: '无效的更新参数' }, { status: 400 });
   } catch (e) {

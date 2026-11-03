@@ -7,6 +7,7 @@ import {
   type Checklist,
   type Day,
   type Event,
+  type Group,
   type Item,
   eventGroups,
   findEvent,
@@ -192,25 +193,40 @@ export function importCalendarEvents(
           ev.title = p.title;
           changed = true;
         }
-        const { items: noteItems, rest: noteRest } = parseNoteItems(p.description);
+        const { items: flatItems, rest: noteRest, sections: noteSections } = parseNoteItems(p.description);
         if (ev.note !== noteRest) {
           ev.note = noteRest;
           changed = true;
         }
-        if (noteItems.length > 0) {
+        if (flatItems.length > 0 || noteSections.length > 0) {
           // 按文本匹配旧明细，勾选态原样保留；新增条例默认未勾选
           const oldDone = new Map<string, boolean>();
-          for (const g of ev.groups) {
+          for (const g of eventGroups(ev)) {
             for (const it of g.items) {
               if (!oldDone.has(it.text)) oldDone.set(it.text, it.done);
             }
           }
-          const nextItems = noteItems.map((text, i) => ({ id: `n${i + 1}`, text, done: oldDone.get(text) ?? false }));
-          const oldTexts = ev.groups.flatMap((g) => g.items.map((it) => it.text));
-          const same = oldTexts.length === nextItems.length && oldTexts.every((t, i) => t === nextItems[i].text);
-          if (!same) {
-            const gid = ev.groups[0]?.id ?? `g_${ev.id}`;
-            ev.groups = [{ id: gid, label: '', items: nextItems }];
+          // 组 id 按组名沿用，避免同步后正在编辑的组对不上；新组按顺序编号
+          const oldIdByLabel = new Map<string, string>();
+          for (const g of ev.groups) {
+            if (!oldIdByLabel.has(g.label)) oldIdByLabel.set(g.label, g.id);
+          }
+          const buildItems = (texts: string[]) =>
+            texts.map((text, i) => ({ id: `n${i + 1}`, text, done: oldDone.get(text) ?? false }));
+          const nextGroups: Group[] = [];
+          if (flatItems.length > 0) {
+            nextGroups.push({ id: oldIdByLabel.get('') ?? `g_${ev.id}`, label: '', items: buildItems(flatItems) });
+          }
+          noteSections.forEach((s, i) => {
+            nextGroups.push({
+              id: oldIdByLabel.get(s.title) ?? `g_${ev.id}_s${i + 1}`,
+              label: s.title,
+              items: buildItems(s.items),
+            });
+          });
+          const signature = (gs: Group[]) => gs.map((g) => `${g.label}\n${g.items.map((it) => it.text).join('\n')}`).join('\n---\n');
+          if (signature(ev.groups) !== signature(nextGroups)) {
+            ev.groups = nextGroups;
             changed = true;
           }
         }
@@ -278,6 +294,32 @@ export function setItemDone(groupId: string, itemId: string, done: boolean): Pro
     const item = group.items.find((i) => i.id === itemId);
     if (!item) throw new NotFoundError(itemId);
     item.done = done;
+
+    // 联动：所属事项的所有明细是否已全部勾选
+    const ev = findEventByGroup(doc, groupId);
+    let eventDone: { id: string; done: boolean } | undefined;
+    if (ev) {
+      const allItems = eventGroups(ev).flatMap((g) => g.items);
+      if (allItems.length > 0) {
+        const allDone = allItems.every((i) => i.done);
+        if (ev.done !== allDone) {
+          ev.done = allDone;
+          eventDone = { id: ev.id, done: allDone };
+        }
+      }
+    }
+
+    return commit(doc, { type: 'group', id: groupId, items: group.items, eventDone });
+  });
+}
+
+/** 切换整组的勾选态（组名勾选 = 组内全部勾上，逻辑同事项大标题的级联） */
+export function setGroupDone(groupId: string, done: boolean): Promise<Change> {
+  return serial(async () => {
+    const doc = await readState();
+    const group = findGroup(doc, groupId);
+    if (!group) throw new NotFoundError(groupId);
+    group.items = group.items.map((i) => ({ ...i, done }));
 
     // 联动：所属事项的所有明细是否已全部勾选
     const ev = findEventByGroup(doc, groupId);

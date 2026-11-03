@@ -344,6 +344,16 @@ export default function Checklist({ initial }: { initial: Doc }) {
   const selectedDate = parseDateKey(selected);
   const weekKeys = weekOf(selected);
 
+  // 切到新的一天后，平滑滚回页面顶部（首屏挂载时不滚）
+  const firstSelectedRef = useRef(true);
+  useEffect(() => {
+    if (firstSelectedRef.current) {
+      firstSelectedRef.current = false;
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selected]);
+
   // ---------- 轮播轨道：左右切换按轮播图实现 ----------
   // 平时轨道只有三页（前一天 / 当天 / 后一天），旧页和新页在一条轨道上一起平移；
   // 跨多天时临时展开起止之间的所有页，轨道一次滑过中间页。
@@ -581,6 +591,24 @@ export default function Checklist({ initial }: { initial: Doc }) {
     writer.send('groups/' + gid, { itemId, done });
   };
 
+  /** 组名勾选：组内明细全部勾上/取消，逻辑同大标题级联 */
+  const toggleGroup = (gid: string, done: boolean) => {
+    let next = mapGroup(docRef.current, gid, (items) => items.map((i) => ({ ...i, done })));
+    // 联动检查：所属大标题的所有小标题是否已全部勾选
+    const ev = findEventByGroup(next, gid);
+    if (ev) {
+      const allItems = eventGroups(ev).flatMap((g) => g.items);
+      if (allItems.length > 0) {
+        const allDone = allItems.every((i) => i.done);
+        if (ev.done !== allDone) {
+          next = mapEvent(next, ev.id, allDone);
+        }
+      }
+    }
+    commit(next);
+    writer.send('groups/' + gid, { done });
+  };
+
   // ---------- 进度 ----------
   const counts = useMemo(() => {
     let ti = 0, td = 0, ii = 0, id = 0;
@@ -689,6 +717,7 @@ export default function Checklist({ initial }: { initial: Doc }) {
               ev={ev}
               onTask={toggleTask}
               onToggleItem={toggleItem}
+              onToggleGroup={toggleGroup}
               open={open}
               onSection={toggleSection}
               perSec={counts.perSec}
@@ -865,6 +894,7 @@ function EventBlock({
   ev,
   onTask,
   onToggleItem,
+  onToggleGroup,
   open,
   onSection,
   perSec,
@@ -874,6 +904,7 @@ function EventBlock({
   ev: Event;
   onTask: (eid: string, done: boolean) => void;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
+  onToggleGroup: (gid: string, done: boolean) => void;
   open: Record<string, boolean>;
   onSection: (id: string, value: boolean) => void;
   perSec: Record<string, [number, number]>;
@@ -912,7 +943,14 @@ function EventBlock({
       {ev.groups.length > 0 && (
         <div className="direct">
           {ev.groups.map((g) => (
-            <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} onDisabledTap={onDisabledTap} />
+            <GroupBlock
+              key={g.id}
+              group={g}
+              onToggleItem={onToggleItem}
+              onToggleGroup={onToggleGroup}
+              checkDisabled={checkDisabled}
+              onDisabledTap={onDisabledTap}
+            />
           ))}
         </div>
       )}
@@ -925,6 +963,7 @@ function EventBlock({
           open={open[s.id] !== false}
           onToggle={(v) => onSection(s.id, v)}
           onToggleItem={onToggleItem}
+          onToggleGroup={onToggleGroup}
           checkDisabled={checkDisabled}
           onDisabledTap={onDisabledTap}
         />
@@ -939,6 +978,7 @@ function SectionBlock({
   open,
   onToggle,
   onToggleItem,
+  onToggleGroup,
   checkDisabled,
   onDisabledTap,
 }: {
@@ -947,6 +987,7 @@ function SectionBlock({
   open: boolean;
   onToggle: (open: boolean) => void;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
+  onToggleGroup: (gid: string, done: boolean) => void;
   checkDisabled: boolean;
   onDisabledTap: () => void;
 }) {
@@ -969,7 +1010,14 @@ function SectionBlock({
 
       <div className="sec-body">
         {s.groups.map((g) => (
-          <GroupBlock key={g.id} group={g} onToggleItem={onToggleItem} checkDisabled={checkDisabled} onDisabledTap={onDisabledTap} />
+          <GroupBlock
+            key={g.id}
+            group={g}
+            onToggleItem={onToggleItem}
+            onToggleGroup={onToggleGroup}
+            checkDisabled={checkDisabled}
+            onDisabledTap={onDisabledTap}
+          />
         ))}
       </div>
     </details>
@@ -979,20 +1027,34 @@ function SectionBlock({
 function GroupBlock({
   group,
   onToggleItem,
+  onToggleGroup,
   checkDisabled,
   onDisabledTap,
 }: {
   group: Group;
   onToggleItem: (gid: string, itemId: string, done: boolean) => void;
+  onToggleGroup: (gid: string, done: boolean) => void;
   checkDisabled: boolean;
   onDisabledTap: () => void;
 }) {
   if (!group.items.length) return null;
+  const doneCount = group.items.filter((i) => i.done).length;
+  const allDone = doneCount === group.items.length;
+  const partial = doneCount > 0 && !allDone;
 
   return (
-    <div className="grp">
+    <div className={'grp' + (group.label ? ' grp-card' : '')}>
       {group.label && (
         <div className="grp-header">
+          <CheckBox
+            id={'grp-' + group.id}
+            className="item-checkbox"
+            checked={allDone}
+            indeterminate={partial}
+            disabled={checkDisabled}
+            onToggle={(done) => onToggleGroup(group.id, done)}
+            onDisabledTap={onDisabledTap}
+          />
           <div className="grp-label">{group.label}</div>
         </div>
       )}

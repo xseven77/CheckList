@@ -4,7 +4,7 @@
  */
 import type { ParsedCalendarEvent } from './ics';
 import { parseNoteItems } from './noteItems';
-import type { Event } from './types';
+import type { Event, Group } from './types';
 
 const rand = () => Math.random().toString(36).slice(2, 7);
 
@@ -20,27 +20,34 @@ export function timeLabel(ev: ParsedCalendarEvent): string {
 }
 
 /** 解析事件 → 新清单事项（done 恒为 false；已存在事项的合并在 store 层做）。
- * 备注里的条例行拆成一组可勾选明细，剩余正文留在 note 里。 */
+ * 备注里的条例行拆成可勾选明细：小标题前的条例行进一个无名组，
+ * 小标题后的条例行按小标题分进带名分组；剩余正文留在 note 里。 */
 export function toChecklistEvent(parsed: ParsedCalendarEvent): Event {
   const day = dayNumberOf(parsed.date);
   const id = `e${day}_${rand()}`;
-  const { items, rest } = parseNoteItems(parsed.description);
+  const { items, rest, sections } = parseNoteItems(parsed.description);
+  const groups: Group[] = [];
+  if (items.length > 0) {
+    groups.push({
+      id: `g_${id}`,
+      label: '',
+      items: items.map((text, i) => ({ id: `n${i + 1}`, text, done: false })),
+    });
+  }
+  sections.forEach((s, i) => {
+    groups.push({
+      id: `g_${id}_s${i + 1}`,
+      label: s.title,
+      items: s.items.map((text, j) => ({ id: `n${j + 1}`, text, done: false })),
+    });
+  });
   return {
     id,
     time: timeLabel(parsed),
     title: parsed.title,
     note: rest,
     done: false,
-    groups:
-      items.length > 0
-        ? [
-            {
-              id: `g_${id}`,
-              label: '',
-              items: items.map((text, i) => ({ id: `n${i + 1}`, text, done: false })),
-            },
-          ]
-        : [],
+    groups,
     sections: [],
     calUid: parsed.uid,
     location: parsed.location || undefined,
